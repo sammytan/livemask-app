@@ -1,0 +1,17 @@
+name: Frontend CI
+
+on:
+  pull_request:
+  repository_dispatch:
+    types:
+      - docs-contract-changed
+
+jobs:
+  build:
+    runs-on: [self-hosted, livemask, docker]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install
+        run: npm ci
+      - name: Build
+        run: npm run build
