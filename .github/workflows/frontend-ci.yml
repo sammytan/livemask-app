@@ -6,6 +6,10 @@ on:
     types:
       - docs-contract-changed
 
+permissions:
+  actions: read
+  contents: read
+
 jobs:
   build:
     runs-on:
@@ -14,9 +18,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Install
-        run: npm ci
+        run: |
+          if [[ ! -f package.json ]]; then
+            echo "package.json not found; scaffold repository, skip frontend build."
+            exit 0
+          fi
+          npm ci
       - name: Build
-        run: npm run build
+        run: |
+          if [[ ! -f package.json ]]; then
+            echo "package.json not found; scaffold repository, skip frontend build."
+            exit 0
+          fi
+          npm run build
 
   notify-lark:
     needs: [build]
