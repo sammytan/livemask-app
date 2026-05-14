@@ -8,10 +8,25 @@ on:
 
 jobs:
   build:
-    runs-on: [self-hosted, livemask, docker]
+    runs-on:
+      group: livemask-ci
+      labels: [self-hosted, linux, livemask, docker, ci]
     steps:
       - uses: actions/checkout@v4
       - name: Install
         run: npm ci
       - name: Build
         run: npm run build
+
+  notify-lark:
+    needs: [build]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Notify Lark
+        env:
+          LARK_BOT_WEBHOOK: ${{ secrets.LARK_BOT_WEBHOOK }}
+          LARK_BOT_SECRET: ${{ secrets.LARK_BOT_SECRET }}
+          WORKFLOW_RESULT: ${{ needs.build.result }}
+        run: bash .github/scripts/lark-notify.sh "$WORKFLOW_RESULT"
