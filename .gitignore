@@ -1,0 +1,27 @@
+# Flutter/Dart build artifacts
+.dart_tool/
+.packages
+.pub/
+build/
+*.iml
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Android
+android/.gradle/
+android/app/build/
+android/local.properties
+
+# iOS/macOS
+ios/Pods/
+ios/.symlinks/
+macos/Pods/
+macos/.symlinks/
