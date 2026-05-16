@@ -7,6 +7,7 @@ export 'services/config_service.dart' show RemoteConfigService;
 export 'services/config_validator.dart' show ConfigValidator;
 export 'storage/config_cache_storage.dart' show ConfigCacheStorage;
 export 'api/config_api_client.dart' show ConfigApiClient;
+export 'config/app_config.dart' show AppConfig;
 export 'config/default_config.dart'
     show kDefaultRemoteConfigPayload, kDefaultConfigVersion;
 export 'config/platform_info.dart' show PlatformInfo;

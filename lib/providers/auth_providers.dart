@@ -3,11 +3,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../api/auth_api_client.dart';
-import '../api/auth_token_interceptor.dart';
 import '../api/mock_auth_api_client.dart';
 import '../api/real_auth_api_client.dart';
+import '../config/app_config.dart';
 import '../models/auth_models.dart';
 import '../services/auth_service.dart';
+import '../services/dio_factory.dart';
 import '../storage/token_storage.dart';
 
 // ============================================================
@@ -26,42 +27,33 @@ final tokenStorageProvider = Provider<TokenStorage>((ref) {
 
 /// Abstract AuthApiClient provider.
 ///
-/// Returns [MockAuthApiClient] when the Backend is not ready,
-/// or [RealAuthApiClient] when ready.
+/// Returns [MockAuthApiClient] when `AUTH_CLIENT_MODE=mock` (default),
+/// or [RealAuthApiClient] when `AUTH_CLIENT_MODE=real`.
 final authApiClientProvider = Provider<AuthApiClient>((ref) {
-  if (kUseMockAuthClient) {
+  if (AppConfig.useMockAuthClient) {
     return MockAuthApiClient();
   }
   final storage = ref.watch(tokenStorageProvider);
-  final dio = _createAuthenticatedDio(storage, ref);
-  return RealAuthApiClient(httpClient: dio);
+  final dio = _createAuthenticatedDio(storage);
+  return RealAuthApiClient(
+    httpClient: dio,
+    baseUrl: AppConfig.apiBaseUrl,
+  );
 });
 
 /// Creates a Dio instance with the auth interceptor for the real client.
-Dio _createAuthenticatedDio(TokenStorage storage, Ref ref) {
-  final dio = Dio(BaseOptions(
-    connectTimeout: const Duration(seconds: 10),
-    receiveTimeout: const Duration(seconds: 10),
-    headers: {
-      'Content-Type': 'application/json',
-      'Accept': 'application/json',
-    },
-  ));
-  dio.interceptors.add(AuthTokenInterceptor(
+Dio _createAuthenticatedDio(TokenStorage storage) {
+  return DioFactory.createAuthenticatedDio(
     tokenStorage: storage,
     onRefresh: () async {
       final refreshToken = await storage.readRefreshToken();
-      final refreshDio = Dio(BaseOptions(
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        },
-      ));
-      final client = RealAuthApiClient(httpClient: refreshDio);
+      final client = RealAuthApiClient(
+        httpClient: DioFactory.createPlainDio(),
+        baseUrl: AppConfig.apiBaseUrl,
+      );
       return client.refresh(refreshToken);
     },
-  ));
-  return dio;
+  );
 }
 
 /// AuthService provider.
@@ -78,21 +70,13 @@ final authServiceProvider = Provider<AuthService>((ref) {
 /// A Dio instance with Bearer token injection and refresh-on-401.
 ///
 /// Used by [ConfigApiClient], future recommendation API, feedback API, etc.
-/// This provider only works when kUseMockAuthClient is false.
+/// Falls back to a plain Dio when `AUTH_CLIENT_MODE=mock`.
 final authenticatedDioProvider = Provider<Dio>((ref) {
-  if (kUseMockAuthClient) {
-    // Fall back to a plain Dio when using mock client.
-    return Dio(BaseOptions(
-      connectTimeout: const Duration(seconds: 10),
-      receiveTimeout: const Duration(seconds: 10),
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-      },
-    ));
+  if (AppConfig.useMockAuthClient) {
+    return DioFactory.createPlainDio();
   }
   final storage = ref.watch(tokenStorageProvider);
-  return _createAuthenticatedDio(storage, ref);
+  return _createAuthenticatedDio(storage);
 });
 
 // ============================================================
@@ -113,11 +97,6 @@ class AuthNotifier extends StateNotifier<AuthNotifierState> {
   AuthService get _authService => _ref.read(authServiceProvider);
 
   /// Check stored session on app startup.
-  ///
-  /// - If a stored access token exists, try GET /api/v1/me to validate.
-  /// - If /me succeeds, set authenticated state.
-  /// - If /me fails (expired), try refresh once.
-  /// - If everything fails, go to unauthenticated.
   Future<void> tryRestoreSession() async {
     state = state.copyWith(status: AuthState.loading);
     try {
@@ -147,7 +126,6 @@ class AuthNotifier extends StateNotifier<AuthNotifierState> {
           user: user,
         );
       } catch (_) {
-        // Refresh also failed — clear and go unauthenticated.
         await _authService.logout();
         state = AuthNotifierState(status: AuthState.unauthenticated);
       }
@@ -204,7 +182,6 @@ class AuthNotifier extends StateNotifier<AuthNotifierState> {
         clientType: 'app',
       );
       if (response.accessToken != null) {
-        // Immediate login after registration.
         state = AuthNotifierState(
           status: AuthState.authenticated,
           user: UserSummary(
@@ -216,7 +193,6 @@ class AuthNotifier extends StateNotifier<AuthNotifierState> {
           ),
         );
       } else {
-        // Email verification required — stay logged out.
         state = AuthNotifierState(status: AuthState.unauthenticated);
       }
     } on DioStateException catch (e) {
@@ -237,9 +213,7 @@ class AuthNotifier extends StateNotifier<AuthNotifierState> {
     state = state.copyWith(status: AuthState.loading);
     try {
       await _authService.logout();
-    } catch (_) {
-      // Continue even on error.
-    }
+    } catch (_) {}
     state = AuthNotifierState(status: AuthState.unauthenticated, clearUser: true);
   }
 }

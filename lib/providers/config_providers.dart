@@ -2,10 +2,12 @@ import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../api/config_api_client.dart';
+import '../config/app_config.dart';
 import '../models/remote_config.dart';
 import '../services/config_service.dart';
 import '../services/config_validator.dart';
 import '../storage/config_cache_storage.dart';
+import '../services/dio_factory.dart';
 import 'auth_providers.dart';
 
 // --- Low-level dependency providers ---
@@ -22,24 +24,17 @@ final sharedPrefsProvider = FutureProvider<SharedPreferences>(
 /// refresh-on-401 interceptor when using the real Backend.
 /// When mock auth is active, falls back to a plain Dio.
 final dioProvider = Provider<Dio>((ref) {
-  if (kUseMockAuthClient) {
-    return Dio(BaseOptions(
-      connectTimeout: const Duration(seconds: 10),
-      receiveTimeout: const Duration(seconds: 10),
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-      },
-    ));
+  if (AppConfig.useMockAuthClient) {
+    return DioFactory.createPlainDio();
   }
   return ref.watch(authenticatedDioProvider);
 });
 
-/// Config API client — injected with Dio.
+/// Config API client — injected with Dio and base URL from AppConfig.
 final configApiClientProvider = Provider<ConfigApiClient>((ref) {
   return ConfigApiClient(
     httpClient: ref.watch(dioProvider),
-    baseUrl: '',
+    baseUrl: AppConfig.apiBaseUrl,
   );
 });
 

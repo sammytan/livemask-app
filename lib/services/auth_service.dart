@@ -1,33 +1,11 @@
 import 'package:dio/dio.dart';
 import '../api/auth_api_client.dart';
-import '../api/auth_token_interceptor.dart';
 import '../api/mock_auth_api_client.dart';
 import '../api/real_auth_api_client.dart';
+import '../config/app_config.dart';
 import '../models/auth_models.dart';
 import '../storage/token_storage.dart';
-
-/// Whether to use the mock API client (true when Backend is not ready).
-const bool kUseMockAuthClient = true;
-
-/// Creates a Dio instance with the auth token interceptor configured.
-Dio _createAuthenticatedDio({
-  required TokenStorage tokenStorage,
-  required Future<LoginResponse> Function() onRefresh,
-}) {
-  final dio = Dio(BaseOptions(
-    connectTimeout: const Duration(seconds: 10),
-    receiveTimeout: const Duration(seconds: 10),
-    headers: {
-      'Content-Type': 'application/json',
-      'Accept': 'application/json',
-    },
-  ));
-  dio.interceptors.add(AuthTokenInterceptor(
-    tokenStorage: tokenStorage,
-    onRefresh: onRefresh,
-  ));
-  return dio;
-}
+import 'dio_factory.dart';
 
 /// Core auth service that orchestrates login, logout, refresh, and /me calls.
 ///
@@ -41,26 +19,26 @@ class AuthService {
   final TokenStorage storage;
   final AuthApiClient _apiClient;
 
-  /// Creates the default API client based on [kUseMockAuthClient].
+  /// Creates the default API client based on [AppConfig.useMockAuthClient].
   static AuthApiClient _createDefaultApi(TokenStorage storage) {
-    if (kUseMockAuthClient) {
+    if (AppConfig.useMockAuthClient) {
       return MockAuthApiClient();
     }
-    final dio = _createAuthenticatedDio(
+    final dio = DioFactory.createAuthenticatedDio(
       tokenStorage: storage,
       onRefresh: () async {
         final refreshToken = await storage.readRefreshToken();
-        final refreshDio = Dio(BaseOptions(
-          headers: {
-            'Content-Type': 'application/json',
-            'Accept': 'application/json',
-          },
-        ));
-        final client = RealAuthApiClient(httpClient: refreshDio);
+        final client = RealAuthApiClient(
+          httpClient: DioFactory.createPlainDio(),
+          baseUrl: AppConfig.apiBaseUrl,
+        );
         return client.refresh(refreshToken);
       },
     );
-    return RealAuthApiClient(httpClient: dio);
+    return RealAuthApiClient(
+      httpClient: dio,
+      baseUrl: AppConfig.apiBaseUrl,
+    );
   }
 
   // ---- Public API ----
