@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -100,7 +102,9 @@ class AuthNotifier extends StateNotifier<AuthNotifierState> {
   Future<void> tryRestoreSession() async {
     state = state.copyWith(status: AuthState.loading);
     try {
-      final hasSession = await _authService.hasSession();
+      final hasSession = await _authService.hasSession().timeout(
+            const Duration(seconds: 3),
+          );
       if (!hasSession) {
         state = AuthNotifierState(status: AuthState.unauthenticated);
         return;
@@ -108,7 +112,9 @@ class AuthNotifier extends StateNotifier<AuthNotifierState> {
 
       // Try fetching user info.
       try {
-        final user = await _authService.fetchMe();
+        final user = await _authService.fetchMe().timeout(
+              const Duration(seconds: 5),
+            );
         state = AuthNotifierState(
           status: AuthState.authenticated,
           user: user,
@@ -119,7 +125,9 @@ class AuthNotifier extends StateNotifier<AuthNotifierState> {
       }
 
       try {
-        final refreshResult = await _authService.refresh();
+        final refreshResult = await _authService.refresh().timeout(
+              const Duration(seconds: 5),
+            );
         final user = refreshResult.user;
         state = AuthNotifierState(
           status: AuthState.authenticated,
@@ -129,6 +137,8 @@ class AuthNotifier extends StateNotifier<AuthNotifierState> {
         await _authService.logout();
         state = AuthNotifierState(status: AuthState.unauthenticated);
       }
+    } on TimeoutException {
+      state = AuthNotifierState(status: AuthState.unauthenticated);
     } catch (_) {
       state = AuthNotifierState(status: AuthState.unauthenticated);
     }

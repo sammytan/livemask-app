@@ -1,0 +1,4 @@
+[actions.Run]
+command = "./script/build_and_run.sh"
+description = "Build and run LiveMask macOS client locally"
+

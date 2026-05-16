@@ -14,10 +14,17 @@ class RealAuthApiClient implements AuthApiClient {
   final Dio _httpClient;
   final String baseUrl;
 
+  String _url(String path) {
+    if (baseUrl.isEmpty) {
+      return '/$path';
+    }
+    return '${baseUrl.replaceFirst(RegExp(r'/+$'), '')}/$path';
+  }
+
   @override
   Future<RegisterResponse> register(RegisterRequest request) async {
     final response = await _httpClient.post<Map<String, dynamic>>(
-      '${baseUrl}api/v1/auth/register',
+      _url('api/v1/auth/register'),
       data: request.toJson(),
     );
     return RegisterResponse.fromJson(response.data ?? <String, dynamic>{});
@@ -26,7 +33,7 @@ class RealAuthApiClient implements AuthApiClient {
   @override
   Future<LoginResponse> login(LoginRequest request) async {
     final response = await _httpClient.post<Map<String, dynamic>>(
-      '${baseUrl}api/v1/auth/login',
+      _url('api/v1/auth/login'),
       data: request.toJson(),
     );
     return LoginResponse.fromJson(response.data ?? <String, dynamic>{});
@@ -35,7 +42,7 @@ class RealAuthApiClient implements AuthApiClient {
   @override
   Future<LoginResponse> refresh(String? refreshToken) async {
     final response = await _httpClient.post<Map<String, dynamic>>(
-      '${baseUrl}api/v1/auth/refresh',
+      _url('api/v1/auth/refresh'),
       data: {
         'refresh_token': refreshToken ?? '',
         'client_type': 'app',
@@ -47,14 +54,14 @@ class RealAuthApiClient implements AuthApiClient {
   @override
   Future<void> logout() async {
     await _httpClient.post<Map<String, dynamic>>(
-      '${baseUrl}api/v1/auth/logout',
+      _url('api/v1/auth/logout'),
     );
   }
 
   @override
   Future<UserSummary> me() async {
     final response = await _httpClient.get<Map<String, dynamic>>(
-      '${baseUrl}api/v1/me',
+      _url('api/v1/me'),
     );
     return UserSummary.fromJson(response.data ?? <String, dynamic>{});
   }

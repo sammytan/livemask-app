@@ -39,8 +39,6 @@ class _LiveMaskAppState extends ConsumerState<LiveMaskApp> {
 
   @override
   Widget build(BuildContext context) {
-    final authState = ref.watch(authStateProvider);
-
     return MaterialApp(
       title: 'LiveMask',
       debugShowCheckedModeBanner: false,
@@ -49,34 +47,13 @@ class _LiveMaskAppState extends ConsumerState<LiveMaskApp> {
         useMaterial3: true,
         brightness: Brightness.dark,
       ),
-      initialRoute: '/splash',
       routes: {
-        '/splash': (context) => const SplashShell(
-              child: Scaffold(
-                body: Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        Icons.shield_outlined,
-                        size: 80,
-                        color: Colors.indigo,
-                      ),
-                      SizedBox(height: 24),
-                      CircularProgressIndicator(),
-                      SizedBox(height: 16),
-                      Text('Loading...'),
-                    ],
-                  ),
-                ),
-              ),
-            ),
+        '/splash': (context) => const _AppShell(),
         '/login': (context) => const LoginPage(),
         '/register': (context) => const RegisterPage(),
         '/home': (context) => const HomePage(),
         '/config-debug': (context) => const ConfigDebugPage(),
       },
-      // Handle initial routing based on auth state.
       home: const _AppShell(),
     );
   }
@@ -126,13 +103,4 @@ class _AuthGate extends ConsumerWidget {
 
     return const LoginPage();
   }
-}
-
-/// Simple shell widget that passes the child through.
-class SplashShell extends StatelessWidget {
-  const SplashShell({super.key, required this.child});
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) => child;
 }
