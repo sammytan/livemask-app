@@ -17,6 +17,7 @@ fi
 targets=""
 backend_url="${API_BASE_URL:-http://127.0.0.1:${LIVEMASK_BACKEND_HTTP_PORT:-18080}}"
 web_port="${LIVEMASK_APP_WEB_PORT:-3003}"
+device_id=""
 foreground=false
 continue_on_error=true
 
@@ -36,6 +37,7 @@ Shortcuts:
   --all                  Same as --targets all.
   --targets LIST         Comma-separated target queue.
   --foreground           Run the selected start command in the foreground.
+  --device-id ID         Flutter device id for ios/android run.
   --fail-fast            Stop queued builds after the first failure.
 
 Environment:
@@ -81,6 +83,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --backend-url)
       backend_url="$2"
+      shift 2
+      ;;
+    --device-id)
+      device_id="$2"
       shift 2
       ;;
     *)
@@ -277,6 +283,10 @@ build_command_for() {
 
 start_command_for() {
   local target="$1"
+  local run_device="${target}"
+  if [[ -n "${device_id}" ]]; then
+    run_device="${device_id}"
+  fi
   case "${target}" in
     macos)
       printf '%s\n' \
@@ -287,12 +297,12 @@ start_command_for() {
     ios)
       printf '%s\n' \
         "flutter pub get" \
-        "flutter run -d ios $(flutter_defines | xargs)"
+        "flutter run -d ${run_device} $(flutter_defines | xargs)"
       ;;
     android)
       printf '%s\n' \
         "flutter pub get" \
-        "flutter run -d android $(flutter_defines | xargs)"
+        "flutter run -d ${run_device} $(flutter_defines | xargs)"
       ;;
     linux)
       printf '%s\n' \

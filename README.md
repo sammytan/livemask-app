@@ -21,6 +21,14 @@ bash scripts/local-app.sh build --targets macos,ios
 bash scripts/local-app.sh build --targets all
 ```
 
+Run a specific simulator/device:
+
+```bash
+flutter devices
+bash scripts/local-app.sh start --target ios --device-id <simulator-or-device-id>
+bash scripts/local-app.sh start --target android --device-id <emulator-or-device-id>
+```
+
 Web preview is still available for quick UI checks:
 
 ```bash
