@@ -3,21 +3,30 @@ set -euo pipefail
 
 APP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-target="macos"
+targets="macos"
+command="restart"
 foreground=false
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --target)
-      target="$2"
+    build|start|restart|stop|status|doctor)
+      command="$1"
+      shift
+      ;;
+    --target|--targets)
+      targets="$2"
       shift 2
       ;;
     --web)
-      target="web"
+      targets="web"
       shift
       ;;
     --macos)
-      target="macos"
+      targets="macos"
+      shift
+      ;;
+    --ios|--android|--linux|--windows|--all)
+      targets="${1#--}"
       shift
       ;;
     --foreground|--logs|--telemetry|--debug)
@@ -37,10 +46,13 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-args=(restart --target "${target}")
+if [[ "${command}" == "status" || "${command}" == "doctor" ]]; then
+  exec bash "${APP_DIR}/scripts/local-app.sh" "${command}"
+fi
+
+args=("${command}" --targets "${targets}")
 if [[ "${foreground}" == "true" ]]; then
   args+=(--foreground)
 fi
 
 exec bash "${APP_DIR}/scripts/local-app.sh" "${args[@]}"
-

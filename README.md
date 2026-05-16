@@ -14,11 +14,31 @@ bash scripts/local-app.sh start --target macos
 bash scripts/local-app.sh logs --target macos
 ```
 
+Build a queued set of platform targets:
+
+```bash
+bash scripts/local-app.sh build --targets macos,ios
+bash scripts/local-app.sh build --targets all
+```
+
 Web preview is still available for quick UI checks:
 
 ```bash
 bash scripts/local-app.sh start --target web
 ```
+
+Supported target names:
+
+```text
+macos, ios, android, linux, windows, web
+```
+
+Host rules:
+
+- macOS can build/run `macos`, `ios`, `web`, and Android when Android SDK is configured.
+- Linux must be built on Linux.
+- Windows must be built on Windows, for example inside Parallels Desktop.
+- Unsupported targets are reported as skipped/blocking in the queue instead of being treated as success.
 
 Both targets call the local Backend through:
 

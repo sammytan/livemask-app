@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -uo pipefail
 
 APP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 STATE_DIR="${APP_DIR}/.local-dev"
@@ -14,20 +14,29 @@ else
   shift || true
 fi
 
-target="macos"
+targets=""
 backend_url="${API_BASE_URL:-http://127.0.0.1:${LIVEMASK_BACKEND_HTTP_PORT:-18080}}"
 web_port="${LIVEMASK_APP_WEB_PORT:-3003}"
 foreground=false
+continue_on_error=true
 
 usage() {
   cat <<'EOF'
 Usage:
-  bash scripts/local-app.sh start   [--target macos|web] [--foreground]
-  bash scripts/local-app.sh stop    [--target macos|web]
-  bash scripts/local-app.sh restart [--target macos|web]
+  bash scripts/local-app.sh start   [--target macos|ios|android|linux|windows|web]
+  bash scripts/local-app.sh build   [--targets macos,ios|all]
+  bash scripts/local-app.sh stop    [--targets macos,ios|all]
+  bash scripts/local-app.sh restart [--target macos|ios|android|linux|windows|web]
   bash scripts/local-app.sh status
-  bash scripts/local-app.sh logs    [--target macos|web]
+  bash scripts/local-app.sh logs    [--target macos|ios|android|linux|windows|web]
   bash scripts/local-app.sh doctor
+
+Shortcuts:
+  --macos --ios --android --linux --windows --web
+  --all                  Same as --targets all.
+  --targets LIST         Comma-separated target queue.
+  --foreground           Run the selected start command in the foreground.
+  --fail-fast            Stop queued builds after the first failure.
 
 Environment:
   API_BASE_URL                 Backend URL. Default: http://127.0.0.1:18080
@@ -35,27 +44,39 @@ Environment:
   LIVEMASK_APP_WEB_PORT        Flutter web-server port. Default: 3003
 
 Notes:
-  - macos is the default target on Apple Silicon development machines.
   - App runs locally, not in Docker, so Flutter/Dart/Xcode errors stay visible.
+  - On Apple Silicon Macs, macOS and iOS are the primary local verification targets.
+  - Android requires Android SDK/toolchain.
+  - Linux must be built on Linux.
+  - Windows must be built on Windows, for example inside Parallels Desktop.
 EOF
 }
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --target)
-      target="$2"
+    --target|--targets)
+      targets="$2"
       shift 2
       ;;
-    --web)
-      target="web"
+    --all)
+      targets="all"
       shift
       ;;
-    --macos)
-      target="macos"
+    --macos|--ios|--android|--linux|--windows|--web)
+      value="${1#--}"
+      if [[ -z "${targets}" ]]; then
+        targets="${value}"
+      else
+        targets="${targets},${value}"
+      fi
       shift
       ;;
     --foreground)
       foreground=true
+      shift
+      ;;
+    --fail-fast)
+      continue_on_error=false
       shift
       ;;
     --backend-url)
@@ -70,17 +91,42 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-case "${target}" in
-  macos|web) ;;
-  *)
-    echo "Unknown target: ${target}" >&2
-    usage >&2
-    exit 2
-    ;;
-esac
+if [[ -z "${targets}" ]]; then
+  targets="macos"
+fi
 
-pid_file="${RUN_DIR}/${target}.pid"
-log_file="${LOG_DIR}/${target}.log"
+expand_targets() {
+  local raw="$1"
+  if [[ "${raw}" == "all" ]]; then
+    printf '%s\n' macos ios android linux windows web
+    return 0
+  fi
+  local item
+  IFS=',' read -r -a items <<<"${raw}"
+  for item in "${items[@]}"; do
+    item="$(echo "${item}" | tr '[:upper:]' '[:lower:]' | xargs)"
+    [[ -n "${item}" ]] && printf '%s\n' "${item}"
+  done
+}
+
+host_os() {
+  case "$(uname -s 2>/dev/null || echo unknown)" in
+    Darwin) echo "macos" ;;
+    Linux) echo "linux" ;;
+    MINGW*|MSYS*|CYGWIN*) echo "windows" ;;
+    *) echo "unknown" ;;
+  esac
+}
+
+validate_target() {
+  case "$1" in
+    macos|ios|android|linux|windows|web) return 0 ;;
+    *)
+      echo "Unknown target: $1" >&2
+      return 2
+      ;;
+  esac
+}
 
 require_flutter() {
   if ! command -v flutter >/dev/null 2>&1; then
@@ -92,19 +138,72 @@ Install Flutter locally and reopen the terminal, then verify:
 
 On macOS, also install full Xcode and select it:
   sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
+  sudo xcodebuild -license accept
 EOF
-    exit 127
+    return 127
   fi
 }
 
-ensure_macos_target() {
-  if [[ ! -d "${APP_DIR}/macos" ]]; then
-    echo "macos/ target is missing; generating Flutter macOS scaffold..."
-    (cd "${APP_DIR}" && flutter create --platforms=macos .)
+target_supported_on_host() {
+  local target="$1"
+  local os
+  os="$(host_os)"
+  case "${target}" in
+    macos|ios)
+      [[ "${os}" == "macos" ]]
+      ;;
+    linux)
+      [[ "${os}" == "linux" ]]
+      ;;
+    windows)
+      [[ "${os}" == "windows" ]]
+      ;;
+    android|web)
+      return 0
+      ;;
+  esac
+}
+
+unsupported_message() {
+  local target="$1"
+  case "${target}" in
+    macos|ios)
+      echo "${target}: requires macOS + full Xcode."
+      ;;
+    linux)
+      echo "linux: requires a Linux host."
+      ;;
+    windows)
+      echo "windows: requires a Windows host, e.g. Parallels Desktop Windows VM."
+      ;;
+    android)
+      echo "android: requires Android SDK/toolchain configured in flutter doctor."
+      ;;
+  esac
+}
+
+ensure_target_scaffold() {
+  local target="$1"
+  local platform="${target}"
+  [[ "${target}" == "web" ]] && platform="web"
+  if [[ ! -d "${APP_DIR}/${platform}" ]]; then
+    echo "${platform}/ target is missing; generating Flutter scaffold..."
+    (cd "${APP_DIR}" && flutter create --platforms="${platform}" .)
   fi
 }
 
-is_running() {
+pid_file_for() {
+  printf '%s/%s.pid' "${RUN_DIR}" "$1"
+}
+
+log_file_for() {
+  printf '%s/%s.log' "${LOG_DIR}" "$1"
+}
+
+is_running_target() {
+  local target="$1"
+  local pid_file
+  pid_file="$(pid_file_for "${target}")"
   [[ -f "${pid_file}" ]] || return 1
   local pid
   pid="$(cat "${pid_file}" 2>/dev/null || true)"
@@ -113,7 +212,10 @@ is_running() {
 }
 
 stop_target() {
-  if is_running; then
+  local target="$1"
+  local pid_file
+  pid_file="$(pid_file_for "${target}")"
+  if is_running_target "${target}"; then
     local pid
     pid="$(cat "${pid_file}")"
     echo "Stopping LiveMask App ${target} (pid=${pid})..."
@@ -127,90 +229,205 @@ stop_target() {
   rm -f "${pid_file}"
 }
 
-run_command() {
+flutter_defines() {
+  printf '%s\n' \
+    "--dart-define=AUTH_CLIENT_MODE=real" \
+    "--dart-define=API_BASE_URL=${backend_url}"
+}
+
+build_command_for() {
+  local target="$1"
   case "${target}" in
     macos)
-      ensure_macos_target
       printf '%s\n' \
         "flutter config --enable-macos-desktop" \
         "flutter pub get" \
-        "flutter run -d macos --dart-define=AUTH_CLIENT_MODE=real --dart-define=API_BASE_URL=${backend_url}"
+        "flutter build macos $(flutter_defines | xargs)"
+      ;;
+    ios)
+      printf '%s\n' \
+        "flutter pub get" \
+        "flutter build ios --simulator --no-codesign $(flutter_defines | xargs)"
+      ;;
+    android)
+      printf '%s\n' \
+        "flutter pub get" \
+        "flutter build apk --debug $(flutter_defines | xargs)"
+      ;;
+    linux)
+      printf '%s\n' \
+        "flutter config --enable-linux-desktop" \
+        "flutter pub get" \
+        "flutter build linux $(flutter_defines | xargs)"
+      ;;
+    windows)
+      printf '%s\n' \
+        "flutter config --enable-windows-desktop" \
+        "flutter pub get" \
+        "flutter build windows $(flutter_defines | xargs)"
       ;;
     web)
       printf '%s\n' \
         "flutter config --enable-web" \
         "flutter pub get" \
-        "flutter run -d web-server --web-hostname 127.0.0.1 --web-port ${web_port} --dart-define=AUTH_CLIENT_MODE=real --dart-define=API_BASE_URL=${backend_url}"
+        "flutter build web $(flutter_defines | xargs)"
       ;;
   esac
 }
 
-start_target() {
-  require_flutter
-  if is_running; then
-    echo "LiveMask App ${target} is already running (pid=$(cat "${pid_file}"))."
-    echo "Logs: ${log_file}"
-    return 0
-  fi
+start_command_for() {
+  local target="$1"
+  case "${target}" in
+    macos)
+      printf '%s\n' \
+        "flutter config --enable-macos-desktop" \
+        "flutter pub get" \
+        "flutter run -d macos $(flutter_defines | xargs)"
+      ;;
+    ios)
+      printf '%s\n' \
+        "flutter pub get" \
+        "flutter run -d ios $(flutter_defines | xargs)"
+      ;;
+    android)
+      printf '%s\n' \
+        "flutter pub get" \
+        "flutter run -d android $(flutter_defines | xargs)"
+      ;;
+    linux)
+      printf '%s\n' \
+        "flutter config --enable-linux-desktop" \
+        "flutter pub get" \
+        "flutter run -d linux $(flutter_defines | xargs)"
+      ;;
+    windows)
+      printf '%s\n' \
+        "flutter config --enable-windows-desktop" \
+        "flutter pub get" \
+        "flutter run -d windows $(flutter_defines | xargs)"
+      ;;
+    web)
+      printf '%s\n' \
+        "flutter config --enable-web" \
+        "flutter pub get" \
+        "flutter run -d web-server --web-hostname 127.0.0.1 --web-port ${web_port} $(flutter_defines | xargs)"
+      ;;
+  esac
+}
 
-  echo "Starting LiveMask App ${target} against ${backend_url}..."
-  echo "Logs: ${log_file}"
+execute_command_queue() {
+  local command_kind="$1"
+  local target="$2"
+  local log_file
+  log_file="$(log_file_for "${target}")"
   : >"${log_file}"
 
-  if [[ "${foreground}" == "true" ]]; then
+  validate_target "${target}" || return $?
+  if ! target_supported_on_host "${target}"; then
+    unsupported_message "${target}" | tee -a "${log_file}"
+    return 78
+  fi
+  require_flutter || return $?
+
+  ensure_target_scaffold "${target}" || return $?
+
+  local generator
+  if [[ "${command_kind}" == "build" ]]; then
+    generator="build_command_for"
+  else
+    generator="start_command_for"
+  fi
+
+  if [[ "${foreground}" == "true" || "${command_kind}" == "build" ]]; then
     (
-      cd "${APP_DIR}"
+      cd "${APP_DIR}" || exit 1
       while IFS= read -r line; do
+        echo "+ ${line}"
         eval "${line}"
-      done < <(run_command)
-    )
-    return 0
+      done < <("${generator}" "${target}")
+    ) 2>&1 | tee -a "${log_file}"
+    return "${PIPESTATUS[0]}"
   fi
 
   (
-    cd "${APP_DIR}"
+    cd "${APP_DIR}" || exit 1
     while IFS= read -r line; do
       echo "+ ${line}"
       eval "${line}"
-    done < <(run_command)
+    done < <("${generator}" "${target}")
   ) >>"${log_file}" 2>&1 &
-  echo "$!" >"${pid_file}"
+  echo "$!" >"$(pid_file_for "${target}")"
   sleep 2
-  if ! is_running; then
+  if ! is_running_target "${target}"; then
     echo "LiveMask App ${target} failed to start. Last log lines:" >&2
     tail -n 80 "${log_file}" >&2 || true
-    rm -f "${pid_file}"
-    exit 1
+    rm -f "$(pid_file_for "${target}")"
+    return 1
   fi
-  echo "LiveMask App ${target} started (pid=$(cat "${pid_file}"))."
+  echo "LiveMask App ${target} started (pid=$(cat "$(pid_file_for "${target}")"))."
+}
+
+run_for_targets() {
+  local action="$1"
+  local failed=0
+  local target
+  while IFS= read -r target; do
+    [[ -n "${target}" ]] || continue
+    echo "== ${action}: ${target} =="
+    case "${action}" in
+      build)
+        execute_command_queue build "${target}" || failed=1
+        ;;
+      start)
+        execute_command_queue start "${target}" || failed=1
+        ;;
+      restart)
+        stop_target "${target}"
+        execute_command_queue start "${target}" || failed=1
+        ;;
+      stop)
+        validate_target "${target}" || failed=1
+        stop_target "${target}"
+        ;;
+    esac
+    if [[ "${failed}" -ne 0 && "${continue_on_error}" == "false" ]]; then
+      return "${failed}"
+    fi
+  done < <(expand_targets "${targets}")
+  return "${failed}"
+}
+
+status_all() {
+  local target
+  for target in macos ios android linux windows web; do
+    if is_running_target "${target}"; then
+      echo "${target}: running (pid=$(cat "$(pid_file_for "${target}")")) logs=$(log_file_for "${target}")"
+    else
+      echo "${target}: stopped"
+    fi
+  done
 }
 
 case "${command}" in
+  build)
+    run_for_targets build
+    ;;
   start)
-    start_target
+    run_for_targets start
     ;;
   stop)
-    stop_target
+    run_for_targets stop
     ;;
   restart)
-    stop_target
-    start_target
+    run_for_targets restart
     ;;
   status)
-    for t in macos web; do
-      pid_file="${RUN_DIR}/${t}.pid"
-      log_file="${LOG_DIR}/${t}.log"
-      target="${t}"
-      if is_running; then
-        echo "${t}: running (pid=$(cat "${pid_file}")) logs=${log_file}"
-      else
-        echo "${t}: stopped"
-      fi
-    done
+    status_all
     ;;
   logs)
-    touch "${log_file}"
-    tail -n 120 -f "${log_file}"
+    first_target="$(expand_targets "${targets}" | head -n 1)"
+    touch "$(log_file_for "${first_target}")"
+    tail -n 120 -f "$(log_file_for "${first_target}")"
     ;;
   doctor)
     if command -v flutter >/dev/null 2>&1; then
@@ -225,6 +442,16 @@ case "${command}" in
     else
       echo "xcodebuild: not found"
     fi
+    echo
+    echo "Host OS: $(host_os)"
+    echo "Supported here:"
+    for target in macos ios android linux windows web; do
+      if target_supported_on_host "${target}"; then
+        echo "- ${target}"
+      else
+        echo "- ${target}: $(unsupported_message "${target}")"
+      fi
+    done
     ;;
   help|-h|--help)
     usage
@@ -235,4 +462,3 @@ case "${command}" in
     exit 2
     ;;
 esac
-
