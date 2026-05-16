@@ -14,6 +14,17 @@ bash scripts/local-app.sh start --target macos
 bash scripts/local-app.sh logs --target macos
 ```
 
+Single-target builds are the default when system resources are tight:
+
+```bash
+bash scripts/local-app.sh build --target macos
+bash scripts/local-app.sh build --target ios
+bash scripts/local-app.sh build --target android
+bash scripts/local-app.sh build --target linux
+bash scripts/local-app.sh build --target windows
+bash scripts/local-app.sh build --target web
+```
+
 Build a queued set of platform targets:
 
 ```bash
