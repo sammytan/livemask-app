@@ -13,6 +13,9 @@
 
 ## Multi-Window Development
 This window is for **Flutter App** development.
+Always start from `dev`. If local `dev` does not exist, create it from `origin/dev` or `origin/main`.
+Never implement daily development directly on `main`; `main` is staging/pre-release only.
+Production work must come from a GitHub Release / `v*` tag, not from an ad hoc branch.
 Always verify Onboarding flow, GEOIP sync, and sing-box config compatibility with Backend and NodeAgent.
 
 ## Task Completion Report
