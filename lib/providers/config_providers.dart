@@ -6,26 +6,34 @@ import '../models/remote_config.dart';
 import '../services/config_service.dart';
 import '../services/config_validator.dart';
 import '../storage/config_cache_storage.dart';
+import 'auth_providers.dart';
 
 // --- Low-level dependency providers ---
-
-/// Dio instance for API calls.
-final dioProvider = Provider<Dio>((ref) {
-  final dio = Dio(BaseOptions(
-    connectTimeout: const Duration(seconds: 10),
-    receiveTimeout: const Duration(seconds: 10),
-    headers: {
-      'Content-Type': 'application/json',
-      'Accept': 'application/json',
-    },
-  ));
-  return dio;
-});
 
 /// SharedPreferences instance.
 final sharedPrefsProvider = FutureProvider<SharedPreferences>(
   (_) async => SharedPreferences.getInstance(),
 );
+
+/// Dio for API calls.
+///
+/// Uses the authenticated Dio from [authenticatedDioProvider] so that
+/// config API calls carry the Bearer token and benefit from
+/// refresh-on-401 interceptor when using the real Backend.
+/// When mock auth is active, falls back to a plain Dio.
+final dioProvider = Provider<Dio>((ref) {
+  if (kUseMockAuthClient) {
+    return Dio(BaseOptions(
+      connectTimeout: const Duration(seconds: 10),
+      receiveTimeout: const Duration(seconds: 10),
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      },
+    ));
+  }
+  return ref.watch(authenticatedDioProvider);
+});
 
 /// Config API client — injected with Dio.
 final configApiClientProvider = Provider<ConfigApiClient>((ref) {
@@ -36,7 +44,8 @@ final configApiClientProvider = Provider<ConfigApiClient>((ref) {
 });
 
 /// Config cache storage — injected with SharedPreferences.
-final configCacheStorageProvider = FutureProvider<ConfigCacheStorage>((ref) async {
+final configCacheStorageProvider =
+    FutureProvider<ConfigCacheStorage>((ref) async {
   final prefs = await ref.watch(sharedPrefsProvider.future);
   return ConfigCacheStorage(prefs: prefs);
 });
@@ -47,7 +56,8 @@ final configValidatorProvider = Provider<ConfigValidator>((ref) {
 });
 
 /// Remote config service — assembled from above dependencies.
-final remoteConfigServiceProvider = FutureProvider<RemoteConfigService>((ref) async {
+final remoteConfigServiceProvider =
+    FutureProvider<RemoteConfigService>((ref) async {
   final apiClient = ref.watch(configApiClientProvider);
   final cacheStorage = await ref.watch(configCacheStorageProvider.future);
   final validator = ref.watch(configValidatorProvider);
@@ -61,10 +71,6 @@ final remoteConfigServiceProvider = FutureProvider<RemoteConfigService>((ref) as
 // --- Stateful config state provider ---
 
 /// The current [RemoteConfigState] — updated by [configNotifierProvider].
-///
-/// Starts as [RemoteConfigState.initial] and is populated:
-/// - On app startup via [ConfigNotifier.loadCached].
-/// - On manual refresh via [ConfigNotifier.refresh].
 final configStateProvider =
     StateNotifierProvider<ConfigNotifier, RemoteConfigState>((ref) {
   return ConfigNotifier(ref);

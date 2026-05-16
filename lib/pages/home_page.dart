@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/remote_config.dart';
+import '../providers/auth_providers.dart';
 import '../providers/config_providers.dart';
-import 'config_debug_page.dart';
 
 class HomePage extends ConsumerWidget {
   const HomePage({super.key});
@@ -10,11 +10,22 @@ class HomePage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final configState = ref.watch(configStateProvider);
+    final authState = ref.watch(authStateProvider);
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('LiveMask'),
         actions: [
+          if (authState.user != null)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              child: Center(
+                child: Text(
+                  authState.user!.email,
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ),
+            ),
           IconButton(
             icon: const Icon(Icons.refresh),
             tooltip: 'Refresh config',
@@ -26,13 +37,17 @@ class HomePage extends ConsumerWidget {
             icon: const Icon(Icons.bug_report_outlined),
             tooltip: 'Config debug',
             onPressed: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => const ConfigDebugPage(),
-                ),
-              );
+              Navigator.of(context).pushNamed('/config-debug');
             },
           ),
+          if (authState.isAuthenticated)
+            IconButton(
+              icon: const Icon(Icons.logout),
+              tooltip: 'Logout',
+              onPressed: () async {
+                await ref.read(authStateProvider.notifier).logout();
+              },
+            ),
         ],
       ),
       body: Center(
@@ -49,9 +64,52 @@ class HomePage extends ConsumerWidget {
               const SizedBox(height: 24),
               Text(
                 _statusLabel(configState.status),
+                textAlign: TextAlign.center,
                 style: Theme.of(context).textTheme.headlineSmall,
               ),
               const SizedBox(height: 8),
+
+              // Auth info
+              if (authState.isAuthenticated && authState.user != null) ...[
+                const SizedBox(height: 12),
+                Chip(
+                  avatar: const Icon(Icons.person, size: 16),
+                  label: Text(authState.user!.email),
+                ),
+                Text(
+                  'Roles: ${authState.user!.roles.join(", ")}',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: Colors.grey,
+                      ),
+                ),
+              ],
+
+              // User summary area when logged in
+              if (authState.isAuthenticated && authState.user != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 16),
+                  child: Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        children: [
+                          _infoRow(
+                            context,
+                            'User ID',
+                            authState.user!.userId,
+                          ),
+                          _infoRow(
+                            context,
+                            'Subscription',
+                            authState.user!.subscriptionStatus ?? 'none',
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+
+              // Error for config
               if (configState.errorMessage != null)
                 Padding(
                   padding: const EdgeInsets.only(top: 12),
@@ -72,6 +130,29 @@ class HomePage extends ConsumerWidget {
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _infoRow(BuildContext context, String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 120,
+            child: Text(
+              label,
+              style: const TextStyle(fontWeight: FontWeight.w500),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: const TextStyle(fontSize: 13),
+            ),
+          ),
+        ],
       ),
     );
   }
