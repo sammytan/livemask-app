@@ -214,6 +214,6 @@ class AuthNotifier extends StateNotifier<AuthNotifierState> {
     try {
       await _authService.logout();
     } catch (_) {}
-    state = AuthNotifierState(status: AuthState.unauthenticated, clearUser: true);
+    state = state.copyWith(status: AuthState.unauthenticated, clearUser: true);
   }
 }

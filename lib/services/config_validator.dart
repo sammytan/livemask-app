@@ -60,7 +60,7 @@ class ConfigValidator {
       );
     }
 
-    return ConfigValidator.valid;
+    return ConfigValidationResult.valid;
   }
 
   /// Verifies that the payload's actual SHA-256 hash matches the claimed hash.
