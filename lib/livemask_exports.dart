@@ -1,6 +1,7 @@
-/// Remote Config — top-level export barrel.
+/// Top-level export barrel for common imports.
 library;
 
+// ---- Remote Config ----
 export 'models/remote_config.dart'
     show RemoteConfigStatus, RemoteConfigResponse, RemoteConfigState;
 export 'services/config_service.dart' show RemoteConfigService;
@@ -12,7 +13,7 @@ export 'config/default_config.dart'
     show kDefaultRemoteConfigPayload, kDefaultConfigVersion;
 export 'config/platform_info.dart' show PlatformInfo;
 
-/// Auth — top-level export barrel.
+// ---- Auth ----
 export 'models/auth_models.dart'
     show
         UserSummary,
@@ -28,3 +29,16 @@ export 'storage/token_storage.dart' show TokenStorage;
 export 'api/auth_api_client.dart' show AuthApiClient;
 export 'api/mock_auth_api_client.dart' show MockAuthApiClient, DioStateException;
 export 'api/real_auth_api_client.dart' show RealAuthApiClient;
+
+// ---- Node ----
+export 'models/node_models.dart'
+    show
+        NodeInfo,
+        NodeListResponse,
+        RecommendedNodeResponse,
+        NodeListState,
+        RecommendedNodeState;
+export 'api/node_api_client.dart' show NodeApiClient;
+export 'api/mock_node_api_client.dart' show MockNodeApiClient;
+export 'api/real_node_api_client.dart' show RealNodeApiClient, NodeException;
+export 'storage/node_cache_storage.dart' show NodeCacheStorage;

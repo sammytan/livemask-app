@@ -1,12 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'models/auth_models.dart';
-import 'pages/config_debug_page.dart';
-import 'pages/home_page.dart';
-import 'pages/login_page.dart';
-import 'pages/register_page.dart';
+import 'theme/app_theme.dart';
 import 'providers/auth_providers.dart';
 import 'providers/config_providers.dart';
+import 'providers/node_providers.dart';
+import 'widgets/app_layout.dart';
+import 'screens/splash_screen.dart';
+import 'screens/onboarding_screen.dart';
+import 'screens/home_screen.dart';
+import 'screens/login_screen.dart';
+import 'screens/register_screen.dart';
+import 'screens/nodes_screen.dart';
+import 'screens/recommended_node_screen.dart';
+import 'screens/plan_screen.dart';
+import 'screens/profile_screen.dart';
+import 'screens/diagnostics_screen.dart';
+import 'screens/config_debug_screen.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -30,10 +39,10 @@ class _LiveMaskAppState extends ConsumerState<LiveMaskApp> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      // Load cached config on startup — non-blocking.
       ref.read(configStateProvider.notifier).loadCached();
-      // Attempt to restore auth session.
       ref.read(authStateProvider.notifier).tryRestoreSession();
+      ref.read(nodeListStateProvider.notifier).loadCached();
+      ref.read(recommendedNodeStateProvider.notifier).loadCached();
     });
   }
 
@@ -42,18 +51,9 @@ class _LiveMaskAppState extends ConsumerState<LiveMaskApp> {
     return MaterialApp(
       title: 'LiveMask',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        colorSchemeSeed: Colors.indigo,
-        useMaterial3: true,
-        brightness: Brightness.dark,
-      ),
-      routes: {
-        '/splash': (context) => const _AppShell(),
-        '/login': (context) => const LoginPage(),
-        '/register': (context) => const RegisterPage(),
-        '/home': (context) => const HomePage(),
-        '/config-debug': (context) => const ConfigDebugPage(),
-      },
+      theme: AppTheme.light(),
+      darkTheme: AppTheme.dark(),
+      themeMode: ThemeMode.light,
       home: const _AppShell(),
     );
   }
@@ -67,40 +67,81 @@ class _AppShell extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final authState = ref.watch(authStateProvider);
 
-    return _AuthGate(authState: authState);
+    // While loading, show the splash screen
+    if (authState.isLoading) {
+      return const SplashScreen();
+    }
+
+    // Authenticated — show the main app shell with navigation
+    if (authState.isAuthenticated) {
+      return const _MainShell();
+    }
+
+    // Not authenticated — go to login
+    return const _MainShell(isLoggedOut: true);
   }
 }
 
-/// Listens to [authState] and shows the correct screen.
-/// While loading, show a splash; once resolved, show login or home.
-class _AuthGate extends ConsumerWidget {
-  const _AuthGate({required this.authState});
+/// Main app shell that manages navigation and screen switching.
+class _MainShell extends ConsumerStatefulWidget {
+  const _MainShell({this.isLoggedOut = false});
 
-  final AuthNotifierState authState;
+  final bool isLoggedOut;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    if (authState.isLoading) {
-      return const Scaffold(
-        body: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.shield_outlined, size: 80, color: Colors.indigo),
-              SizedBox(height: 24),
-              CircularProgressIndicator(),
-              SizedBox(height: 16),
-              Text('LiveMask'),
-            ],
-          ),
-        ),
-      );
+  ConsumerState<_MainShell> createState() => _MainShellState();
+}
+
+class _MainShellState extends ConsumerState<_MainShell> {
+  String _currentPath = '/home';
+
+  void _navigateTo(String path) {
+    setState(() {
+      _currentPath = path;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // On first mount, redirect logged-out users to login
+    if (widget.isLoggedOut && _currentPath != '/login') {
+      // Use post-frame to avoid build-time navigation
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        setState(() {
+          _currentPath = '/login';
+        });
+      });
     }
 
-    if (authState.isAuthenticated) {
-      return const HomePage();
-    }
+    return AppLayout(
+      currentPath: _currentPath,
+      onNavigate: _navigateTo,
+      child: _buildScreen(),
+    );
+  }
 
-    return const LoginPage();
+  Widget _buildScreen() {
+    switch (_currentPath) {
+      case '/login':
+        return LoginScreen(onNavigate: _navigateTo);
+      case '/register':
+        return RegisterScreen(onNavigate: _navigateTo);
+      case '/nodes':
+        return NodesScreen(onNavigate: _navigateTo);
+      case '/nodes/recommended':
+        return const RecommendedNodeScreen();
+      case '/plan':
+        return const PlanScreen();
+      case '/profile':
+        return ProfileScreen(onLogout: () => _navigateTo('/login'));
+      case '/diagnostics':
+        return const DiagnosticsScreen();
+      case '/config-debug':
+        return const ConfigDebugScreen();
+      case '/splash':
+      case '/home':
+      default:
+        return HomeScreen(onNavigate: _navigateTo);
+    }
   }
 }

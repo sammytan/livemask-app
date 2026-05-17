@@ -3,23 +3,21 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../config/app_config.dart';
 import '../models/auth_models.dart';
 import '../providers/auth_providers.dart';
+import '../theme/app_colors.dart';
+import '../theme/app_constants.dart';
+import '../widgets/error_banner.dart';
 
-/// Login page for LiveMask App.
-///
-/// Supports:
-/// - Email/password login
-/// - Inline validation
-/// - Loading state
-/// - Backend error mapping
-/// - Navigation to register
-class LoginPage extends ConsumerStatefulWidget {
-  const LoginPage({super.key});
+/// Login screen matching Atoms design v2.
+class LoginScreen extends ConsumerStatefulWidget {
+  const LoginScreen({super.key, required this.onNavigate});
+
+  final void Function(String path) onNavigate;
 
   @override
-  ConsumerState<LoginPage> createState() => _LoginPageState();
+  ConsumerState<LoginScreen> createState() => _LoginScreenState();
 }
 
-class _LoginPageState extends ConsumerState<LoginPage> {
+class _LoginScreenState extends ConsumerState<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
@@ -46,10 +44,9 @@ class _LoginPageState extends ConsumerState<LoginPage> {
     final authState = ref.watch(authStateProvider);
     final theme = Theme.of(context);
 
-    // Navigate away when authenticated.
     ref.listen<AuthNotifierState>(authStateProvider, (prev, next) {
       if (next.isAuthenticated) {
-        Navigator.of(context).pushReplacementNamed('/home');
+        widget.onNavigate('/home');
       }
     });
 
@@ -65,16 +62,25 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   // App logo / brand
-                  Icon(
-                    Icons.shield_outlined,
-                    size: 72,
-                    color: theme.colorScheme.primary,
+                  Container(
+                    width: 72,
+                    height: 72,
+                    decoration: const BoxDecoration(
+                      color: AppColors.primaryLight,
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      Icons.shield_outlined,
+                      size: 36,
+                      color: AppColors.primary,
+                    ),
                   ),
                   const SizedBox(height: 16),
-                  Text(
+                  const Text(
                     'LiveMask',
                     textAlign: TextAlign.center,
-                    style: theme.textTheme.headlineMedium?.copyWith(
+                    style: TextStyle(
+                      fontSize: 24,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
@@ -82,38 +88,19 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                   Text(
                     'Sign in to your account',
                     textAlign: TextAlign.center,
-                    style: theme.textTheme.bodyLarge?.copyWith(
-                      color: theme.colorScheme.onSurface.withOpacity(0.7),
+                    style: TextStyle(
+                      fontSize: 15,
+                      color: AppColors.muted,
                     ),
                   ),
                   const SizedBox(height: 40),
 
                   // Error banner
                   if (authState.hasError)
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      margin: const EdgeInsets.only(bottom: 16),
-                      decoration: BoxDecoration(
-                        color: theme.colorScheme.errorContainer,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(
-                            Icons.error_outline,
-                            color: theme.colorScheme.error,
-                            size: 20,
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              authState.errorMessage ?? 'An error occurred',
-                              style: TextStyle(
-                                color: theme.colorScheme.onErrorContainer,
-                              ),
-                            ),
-                          ),
-                        ],
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 16),
+                      child: ErrorBanner.danger(
+                        authState.errorMessage ?? 'An error occurred',
                       ),
                     ),
 
@@ -124,8 +111,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                     textInputAction: TextInputAction.next,
                     decoration: const InputDecoration(
                       labelText: 'Email',
-                      prefixIcon: Icon(Icons.email_outlined),
-                      border: OutlineInputBorder(),
+                      prefixIcon: Icon(Icons.email_outlined, size: 20),
                     ),
                     validator: (value) {
                       if (value == null || value.trim().isEmpty) {
@@ -147,13 +133,13 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                     onFieldSubmitted: (_) => _handleLogin(),
                     decoration: InputDecoration(
                       labelText: 'Password',
-                      prefixIcon: const Icon(Icons.lock_outlined),
-                      border: const OutlineInputBorder(),
+                      prefixIcon: const Icon(Icons.lock_outlined, size: 20),
                       suffixIcon: IconButton(
                         icon: Icon(
                           _obscurePassword
                               ? Icons.visibility_off_outlined
                               : Icons.visibility_outlined,
+                          size: 20,
                         ),
                         onPressed: () {
                           setState(() {
@@ -174,54 +160,48 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                   ),
                   const SizedBox(height: 24),
 
-                  // Login button
-                  FilledButton(
-                    onPressed: authState.isLoading ? null : _handleLogin,
-                    style: FilledButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 16),
+                  // Sign In button
+                  SizedBox(
+                    height: 48,
+                    child: FilledButton(
+                      onPressed: authState.isLoading ? null : _handleLogin,
+                      child: authState.isLoading
+                          ? const SizedBox(
+                              height: 20,
+                              width: 20,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
+                            )
+                          : const Text('Sign In'),
                     ),
-                    child: authState.isLoading
-                        ? const SizedBox(
-                            height: 20,
-                            width: 20,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: Colors.white,
-                            ),
-                          )
-                        : const Text(
-                            'Sign In',
-                            style: TextStyle(fontSize: 16),
-                          ),
                   ),
-                  const SizedBox(height: 24),
+                  const SizedBox(height: 16),
 
-                  // Register link
+                  // Sign Up link
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       Text(
                         "Don't have an account? ",
-                        style: TextStyle(
-                          color: theme.colorScheme.onSurface.withOpacity(0.6),
-                        ),
+                        style: TextStyle(color: AppColors.muted),
                       ),
                       TextButton(
-                        onPressed: () {
-                          Navigator.of(context).pushNamed('/register');
-                        },
+                        onPressed: () => widget.onNavigate('/register'),
                         child: const Text('Sign Up'),
                       ),
                     ],
                   ),
 
-                  // Development credentials hint
+                  // Dev credentials hint
                   const SizedBox(height: 16),
                   Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: theme.colorScheme.surfaceContainerHighest,
-                      borderRadius: BorderRadius.circular(8),
+                      color: AppColors.primaryLight,
+                      borderRadius:
+                          BorderRadius.circular(AppConstants.radiusSm),
                     ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -230,8 +210,10 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                           AppConfig.useMockAuthClient
                               ? 'Mock credentials:'
                               : 'Local development credentials:',
-                          style: theme.textTheme.labelMedium?.copyWith(
-                            color: theme.colorScheme.onSurface.withOpacity(0.6),
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w500,
+                            color: AppColors.primaryDark,
                           ),
                         ),
                         const SizedBox(height: 4),
@@ -239,9 +221,10 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                           AppConfig.useMockAuthClient
                               ? 'Email: test@livemask.app\nPassword: password123'
                               : 'Email: user@livemask.dev\nPassword: UserPass123!',
-                          style: theme.textTheme.bodySmall?.copyWith(
+                          style: TextStyle(
+                            fontSize: 11,
                             fontFamily: 'monospace',
-                            fontSize: 12,
+                            color: AppColors.primaryDark,
                           ),
                         ),
                       ],

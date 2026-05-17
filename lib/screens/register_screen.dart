@@ -2,21 +2,24 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/auth_models.dart';
 import '../providers/auth_providers.dart';
+import '../theme/app_colors.dart';
+import '../widgets/error_banner.dart';
 
-/// Register page for LiveMask App.
-class RegisterPage extends ConsumerStatefulWidget {
-  const RegisterPage({super.key});
+/// Registration screen matching Atoms design.
+class RegisterScreen extends ConsumerStatefulWidget {
+  const RegisterScreen({super.key, required this.onNavigate});
+
+  final void Function(String path) onNavigate;
 
   @override
-  ConsumerState<RegisterPage> createState() => _RegisterPageState();
+  ConsumerState<RegisterScreen> createState() => _RegisterScreenState();
 }
 
-class _RegisterPageState extends ConsumerState<RegisterPage> {
+class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
-  final _displayNameController = TextEditingController();
   bool _obscurePassword = true;
 
   @override
@@ -24,7 +27,6 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
     _emailController.dispose();
     _passwordController.dispose();
     _confirmPasswordController.dispose();
-    _displayNameController.dispose();
     super.dispose();
   }
 
@@ -35,9 +37,6 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
     await ref.read(authStateProvider.notifier).register(
           email: _emailController.text.trim(),
           password: _passwordController.text,
-          displayName: _displayNameController.text.trim().isEmpty
-              ? null
-              : _displayNameController.text.trim(),
           requestId: requestId,
         );
   }
@@ -45,19 +44,14 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
   @override
   Widget build(BuildContext context) {
     final authState = ref.watch(authStateProvider);
-    final theme = Theme.of(context);
 
-    // Navigate away when authenticated.
     ref.listen<AuthNotifierState>(authStateProvider, (prev, next) {
       if (next.isAuthenticated) {
-        Navigator.of(context).pushReplacementNamed('/home');
+        widget.onNavigate('/home');
       }
     });
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Create Account'),
-      ),
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
@@ -68,56 +62,34 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
                 mainAxisAlignment: MainAxisAlignment.center,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  const SizedBox(height: 24),
+                  const SizedBox(height: 40),
+                  const Text(
+                    'Create Account',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
                   Text(
                     'Join LiveMask',
                     textAlign: TextAlign.center,
-                    style: theme.textTheme.headlineSmall?.copyWith(
-                      fontWeight: FontWeight.bold,
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: AppColors.muted,
                     ),
                   ),
                   const SizedBox(height: 32),
 
                   // Error banner
                   if (authState.hasError)
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      margin: const EdgeInsets.only(bottom: 16),
-                      decoration: BoxDecoration(
-                        color: theme.colorScheme.errorContainer,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(
-                            Icons.error_outline,
-                            color: theme.colorScheme.error,
-                            size: 20,
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              authState.errorMessage ?? 'An error occurred',
-                              style: TextStyle(
-                                color: theme.colorScheme.onErrorContainer,
-                              ),
-                            ),
-                          ),
-                        ],
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 16),
+                      child: ErrorBanner.danger(
+                        authState.errorMessage ?? 'An error occurred',
                       ),
                     ),
-
-                  // Display name
-                  TextFormField(
-                    controller: _displayNameController,
-                    textInputAction: TextInputAction.next,
-                    decoration: const InputDecoration(
-                      labelText: 'Display Name (optional)',
-                      prefixIcon: Icon(Icons.person_outline),
-                      border: OutlineInputBorder(),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
 
                   // Email
                   TextFormField(
@@ -126,8 +98,7 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
                     textInputAction: TextInputAction.next,
                     decoration: const InputDecoration(
                       labelText: 'Email',
-                      prefixIcon: Icon(Icons.email_outlined),
-                      border: OutlineInputBorder(),
+                      prefixIcon: Icon(Icons.email_outlined, size: 20),
                     ),
                     validator: (value) {
                       if (value == null || value.trim().isEmpty) {
@@ -148,13 +119,13 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
                     textInputAction: TextInputAction.next,
                     decoration: InputDecoration(
                       labelText: 'Password',
-                      prefixIcon: const Icon(Icons.lock_outlined),
-                      border: const OutlineInputBorder(),
+                      prefixIcon: const Icon(Icons.lock_outlined, size: 20),
                       suffixIcon: IconButton(
                         icon: Icon(
                           _obscurePassword
                               ? Icons.visibility_off_outlined
                               : Icons.visibility_outlined,
+                          size: 20,
                         ),
                         onPressed: () {
                           setState(() {
@@ -183,8 +154,7 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
                     onFieldSubmitted: (_) => _handleRegister(),
                     decoration: const InputDecoration(
                       labelText: 'Confirm Password',
-                      prefixIcon: Icon(Icons.lock_outlined),
-                      border: OutlineInputBorder(),
+                      prefixIcon: Icon(Icons.lock_outlined, size: 20),
                     ),
                     validator: (value) {
                       if (value != _passwordController.text) {
@@ -196,41 +166,34 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
                   const SizedBox(height: 24),
 
                   // Register button
-                  FilledButton(
-                    onPressed: authState.isLoading ? null : _handleRegister,
-                    style: FilledButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 16),
+                  SizedBox(
+                    height: 48,
+                    child: FilledButton(
+                      onPressed: authState.isLoading ? null : _handleRegister,
+                      child: authState.isLoading
+                          ? const SizedBox(
+                              height: 20,
+                              width: 20,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
+                            )
+                          : const Text('Create Account'),
                     ),
-                    child: authState.isLoading
-                        ? const SizedBox(
-                            height: 20,
-                            width: 20,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: Colors.white,
-                            ),
-                          )
-                        : const Text(
-                            'Create Account',
-                            style: TextStyle(fontSize: 16),
-                          ),
                   ),
-                  const SizedBox(height: 24),
+                  const SizedBox(height: 16),
 
-                  // Login link
+                  // Sign In link
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       Text(
                         'Already have an account? ',
-                        style: TextStyle(
-                          color: theme.colorScheme.onSurface.withOpacity(0.6),
-                        ),
+                        style: TextStyle(color: AppColors.muted),
                       ),
                       TextButton(
-                        onPressed: () {
-                          Navigator.of(context).pushReplacementNamed('/login');
-                        },
+                        onPressed: () => widget.onNavigate('/login'),
                         child: const Text('Sign In'),
                       ),
                     ],
