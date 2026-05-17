@@ -42,3 +42,26 @@ export 'api/node_api_client.dart' show NodeApiClient;
 export 'api/mock_node_api_client.dart' show MockNodeApiClient;
 export 'api/real_node_api_client.dart' show RealNodeApiClient, NodeException;
 export 'storage/node_cache_storage.dart' show NodeCacheStorage;
+
+// ---- Billing ----
+export 'models/billing_models.dart'
+    show
+        BillingPlan,
+        SubscriptionInfo,
+        BillingHistoryItem,
+        DeviceInfo,
+        BillingPlansResponse,
+        SubscriptionResponse,
+        BillingHistoryResponse,
+        DevicesResponse,
+        CheckoutRequest,
+        CheckoutResponse,
+        BillingPlansState,
+        SubscriptionState,
+        BillingHistoryState,
+        DevicesState;
+export 'api/billing_api_client.dart' show BillingApiClient;
+export 'api/mock_billing_api_client.dart' show MockBillingApiClient;
+export 'api/real_billing_api_client.dart'
+    show RealBillingApiClient, BillingException;
+export 'storage/billing_cache_storage.dart' show BillingCacheStorage;

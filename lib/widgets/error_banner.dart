@@ -23,8 +23,8 @@ class ErrorBanner extends StatelessWidget {
   factory ErrorBanner.warning(String title, {String? message}) =>
       ErrorBanner(title: title, message: message, type: BannerType.warning);
 
-  factory ErrorBanner.danger(String title, {String? message}) =>
-      ErrorBanner(title: title, message: message, type: BannerType.danger);
+  factory ErrorBanner.danger(String title, {String? message, List<Widget>? actions}) =>
+      ErrorBanner(title: title, message: message, type: BannerType.danger, actions: actions);
 
   @override
   Widget build(BuildContext context) {

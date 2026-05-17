@@ -4,6 +4,7 @@ import 'theme/app_theme.dart';
 import 'providers/auth_providers.dart';
 import 'providers/config_providers.dart';
 import 'providers/node_providers.dart';
+import 'providers/billing_providers.dart';
 import 'widgets/app_layout.dart';
 import 'screens/splash_screen.dart';
 import 'screens/onboarding_screen.dart';
@@ -43,6 +44,10 @@ class _LiveMaskAppState extends ConsumerState<LiveMaskApp> {
       ref.read(authStateProvider.notifier).tryRestoreSession();
       ref.read(nodeListStateProvider.notifier).loadCached();
       ref.read(recommendedNodeStateProvider.notifier).loadCached();
+      ref.read(billingPlansStateProvider.notifier).loadCached();
+      ref.read(subscriptionStateProvider.notifier).loadCached();
+      ref.read(billingHistoryStateProvider.notifier).loadCached();
+      ref.read(devicesStateProvider.notifier).loadCached();
     });
   }
 

@@ -1,20 +1,152 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../models/billing_models.dart';
 import '../providers/auth_providers.dart';
+import '../providers/billing_providers.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_constants.dart';
+import '../widgets/empty_state.dart';
+import '../widgets/error_banner.dart';
 
-/// Profile / Settings screen matching Atoms design v2.
-class ProfileScreen extends ConsumerWidget {
+/// Profile / Settings screen with devices section.
+class ProfileScreen extends ConsumerStatefulWidget {
   const ProfileScreen({super.key, required this.onLogout});
 
   final VoidCallback onLogout;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<ProfileScreen> createState() => _ProfileScreenState();
+}
+
+class _ProfileScreenState extends ConsumerState<ProfileScreen> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _refreshDevices());
+  }
+
+  Future<void> _refreshDevices() async {
+    if (!mounted) return;
+    await ref.read(devicesStateProvider.notifier).refresh();
+  }
+
+  Future<void> _handleAddDevice() async {
+    final nameController = TextEditingController();
+    final result = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Add Device'),
+        content: TextField(
+          controller: nameController,
+          decoration: const InputDecoration(
+            labelText: 'Device name',
+            hintText: 'e.g. Sammy iPhone',
+          ),
+          autofocus: true,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, nameController.text.trim()),
+            child: const Text('Add'),
+          ),
+        ],
+      ),
+    );
+
+    if (result == null || result.isEmpty || !mounted) return;
+
+    // Determine platform from user agent or environment.
+    final platform = Theme.of(context).platform == TargetPlatform.iOS
+        ? 'ios'
+        : Theme.of(context).platform == TargetPlatform.android
+            ? 'android'
+            : Theme.of(context).platform == TargetPlatform.macOS
+                ? 'macos'
+                : 'unknown';
+    const appVersion = '0.1.0';
+
+    final error =
+        await ref.read(devicesStateProvider.notifier).addDevice(
+              result,
+              platform,
+              appVersion,
+            );
+
+    if (!mounted) return;
+
+    if (error != null) {
+      if (error.contains('DEVICE_LIMIT_EXCEEDED') ||
+          error.contains('409') ||
+          error.contains('Device limit')) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(error),
+            backgroundColor: AppColors.warning,
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(error)),
+        );
+      }
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Device added successfully')),
+      );
+    }
+  }
+
+  Future<void> _handleRevokeDevice(DeviceInfo device) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Revoke Device'),
+        content: Text(
+            'Remove "${device.deviceName}" from your devices?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: FilledButton.styleFrom(
+              backgroundColor: AppColors.danger,
+            ),
+            child: const Text('Revoke'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true || !mounted) return;
+
+    final error = await ref
+        .read(devicesStateProvider.notifier)
+        .revokeDevice(device.deviceId);
+
+    if (!mounted) return;
+
+    if (error != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error)),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Device revoked')),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final authState = ref.watch(authStateProvider);
+    final devicesState = ref.watch(devicesStateProvider);
     final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
 
     return Scaffold(
       body: Column(
@@ -71,6 +203,17 @@ class ProfileScreen extends ConsumerWidget {
 
                 const SizedBox(height: 24),
 
+                // Devices section
+                _SectionTitle('My Devices'),
+                _DevicesSection(
+                  devicesState: devicesState,
+                  onRefresh: _refreshDevices,
+                  onAddDevice: _handleAddDevice,
+                  onRevokeDevice: _handleRevokeDevice,
+                ),
+
+                const SizedBox(height: 24),
+
                 // Security section
                 _SectionTitle('Security'),
                 _SettingsCard(items: [
@@ -102,7 +245,7 @@ class ProfileScreen extends ConsumerWidget {
                   _SettingItem(
                     icon: Icons.palette_outlined,
                     label: 'Dark Mode',
-                    value: isDark ? 'On' : 'Off',
+                    value: theme.brightness == Brightness.dark ? 'On' : 'Off',
                   ),
                   _SettingItem(
                     icon: Icons.wifi_outlined,
@@ -132,20 +275,21 @@ class ProfileScreen extends ConsumerWidget {
 
                 const SizedBox(height: 24),
 
-                // Sign Out (if logged in)
+                // Sign Out
                 if (authState.isAuthenticated)
                   SizedBox(
                     width: double.infinity,
                     child: OutlinedButton.icon(
                       onPressed: () async {
                         await ref.read(authStateProvider.notifier).logout();
-                        onLogout();
+                        widget.onLogout();
                       },
                       icon: const Icon(Icons.logout, size: 18),
                       label: const Text('Sign Out'),
                       style: OutlinedButton.styleFrom(
                         foregroundColor: AppColors.danger,
-                        side: BorderSide(color: AppColors.danger.withOpacity(0.3)),
+                        side:
+                            BorderSide(color: AppColors.danger.withOpacity(0.3)),
                         padding: const EdgeInsets.symmetric(vertical: 14),
                       ),
                     ),
@@ -157,10 +301,7 @@ class ProfileScreen extends ConsumerWidget {
                 Center(
                   child: Text(
                     'LiveMask v0.1.0',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: AppColors.muted,
-                    ),
+                    style: TextStyle(fontSize: 12, color: AppColors.muted),
                   ),
                 ),
               ],
@@ -171,6 +312,214 @@ class ProfileScreen extends ConsumerWidget {
     );
   }
 }
+
+/// Devices section with list, usage counter, and add/revoke actions.
+class _DevicesSection extends StatelessWidget {
+  const _DevicesSection({
+    required this.devicesState,
+    required this.onRefresh,
+    required this.onAddDevice,
+    required this.onRevokeDevice,
+  });
+
+  final DevicesState devicesState;
+  final VoidCallback onRefresh;
+  final VoidCallback onAddDevice;
+  final void Function(DeviceInfo) onRevokeDevice;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Container(
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface,
+        borderRadius: BorderRadius.circular(AppConstants.radiusMd),
+        border: Border.all(color: theme.colorScheme.outlineVariant),
+      ),
+      child: Column(
+        children: [
+          // Device usage header
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              children: [
+                Icon(Icons.devices_outlined, size: 20, color: AppColors.primary),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    '${devicesState.deviceUsed}/${devicesState.deviceLimit} devices',
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+                if (devicesState.isLoading)
+                  const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                else
+                  InkWell(
+                    onTap: onRefresh,
+                    child: Icon(Icons.refresh, size: 18, color: AppColors.muted),
+                  ),
+              ],
+            ),
+          ),
+
+          // Capacity warning
+          if (!devicesState.hasCapacity && devicesState.hasData)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: AppColors.warningBg,
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.warning_amber_rounded,
+                        size: 16, color: AppColors.warning),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Device limit reached. Remove a device or upgrade your plan.',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: AppColors.warning.withOpacity(0.9),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+          // Stale banner
+          if (devicesState.isFromCache)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+              child: SizedBox(
+                width: double.infinity,
+                child: Text(
+                  'Showing cached data',
+                  style: TextStyle(fontSize: 11, color: AppColors.muted),
+                ),
+              ),
+            ),
+
+          // Device list
+          if (devicesState.isLoading && !devicesState.hasData)
+            const Padding(
+              padding: EdgeInsets.all(24),
+              child: Center(child: CircularProgressIndicator()),
+            )
+          else if (devicesState.hasError && !devicesState.hasData)
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: ErrorBanner.danger(
+                'Could not load devices',
+                message: devicesState.errorMessage,
+                actions: [
+                  TextButton(
+                    onPressed: onRefresh,
+                    child: const Text('Retry'),
+                  ),
+                ],
+              ),
+            )
+          else if (devicesState.isEmpty)
+            Padding(
+              padding: const EdgeInsets.all(24),
+              child: EmptyState(
+                icon: Icons.devices_outlined,
+                title: 'No devices registered',
+                message: 'Register this device to start using LiveMask.',
+              ),
+            )
+          else
+            ...devicesState.devices.map((device) => _DeviceRow(
+                  device: device,
+                  onRevoke: () => onRevokeDevice(device),
+                )),
+
+          // Add device button
+          Padding(
+            padding: const EdgeInsets.all(12),
+            child: SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: devicesState.hasCapacity ? onAddDevice : null,
+                icon: const Icon(Icons.add, size: 18),
+                label: const Text('Add Device'),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Single device row.
+class _DeviceRow extends StatelessWidget {
+  const _DeviceRow({required this.device, required this.onRevoke});
+
+  final DeviceInfo device;
+  final VoidCallback onRevoke;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Row(
+        children: [
+          Text(device.platformIcon, style: const TextStyle(fontSize: 20)),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Text(
+                      device.deviceName,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    if (device.trusted)
+                      Icon(Icons.verified_outlined,
+                          size: 14, color: AppColors.success),
+                  ],
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  '${device.platformLabel}${device.appVersion != null ? ' · v${device.appVersion}' : ''}',
+                  style: TextStyle(fontSize: 11, color: AppColors.muted),
+                ),
+              ],
+            ),
+          ),
+          InkWell(
+            onTap: onRevoke,
+            child: Icon(Icons.remove_circle_outline,
+                size: 20, color: AppColors.danger),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ---- Shared helpers (copied from existing ProfileScreen) ----
 
 class _SectionTitle extends StatelessWidget {
   const _SectionTitle(this.title);
@@ -213,8 +562,8 @@ class _SettingsCard extends StatelessWidget {
           return Column(
             children: [
               Padding(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 16, vertical: 12),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 child: Row(
                   children: [
                     Icon(item.icon, size: 20, color: AppColors.muted),
@@ -262,9 +611,7 @@ class _SettingsCard extends StatelessWidget {
                 ),
               ),
               if (!isLast)
-                Divider(
-                    height: 1,
-                    color: theme.colorScheme.outlineVariant),
+                Divider(height: 1, color: theme.colorScheme.outlineVariant),
             ],
           );
         }),
