@@ -26,14 +26,15 @@ The App is developed and debugged locally, not inside Docker.
 
 ```bash
 bash scripts/local-app.sh doctor
-bash scripts/local-app.sh start --target macos
-bash scripts/local-app.sh logs --target macos
+bash scripts/local-app.sh start --target macos-arm64
+bash scripts/local-app.sh logs --target macos-arm64
 ```
 
 Single-target builds are the default when system resources are tight:
 
 ```bash
-bash scripts/local-app.sh build --target macos
+bash scripts/local-app.sh build --target macos-arm64
+bash scripts/local-app.sh build --target macos-x64
 bash scripts/local-app.sh build --target ios
 bash scripts/local-app.sh build --target android
 bash scripts/local-app.sh build --target linux
@@ -44,7 +45,7 @@ bash scripts/local-app.sh build --target web
 Build a queued set of platform targets:
 
 ```bash
-bash scripts/local-app.sh build --targets macos,ios
+bash scripts/local-app.sh build --targets macos-arm64,ios
 bash scripts/local-app.sh build --targets all
 ```
 
@@ -65,7 +66,7 @@ bash scripts/local-app.sh start --target web
 Supported target names:
 
 ```text
-macos, ios, android, linux, windows, web
+macos, macos-arm64, macos-x64, ios, android, linux, windows, web
 ```
 
 ## Compatibility policy
@@ -78,7 +79,8 @@ supported platform family.
 | --- | --- | --- | --- |
 | iOS | Latest 5 major versions and latest 10 minor/runtime releases available through Xcode | `IPHONEOS_DEPLOYMENT_TARGET=13.0` until native VPN runtime requires a higher floor | macOS host with Xcode simulator matrix; physical iPhone requires Apple Team signing |
 | Android | Latest 5 major Android versions and latest 10 API/minor releases available through Android Studio SDK Manager | Flutter Android default `minSdk`, compile SDK from installed Flutter/Android toolchain; update intentionally per release | macOS/Android Studio for APK build; physical Samsung/Android phone requires USB debugging authorization |
-| macOS | Latest 5 major versions and latest 10 minor releases | `MACOSX_DEPLOYMENT_TARGET=10.15` until native VPN/runtime features require a higher floor | macOS host |
+| macOS Apple Silicon | Latest 5 major versions and latest 10 minor releases on Apple Silicon | `MACOSX_DEPLOYMENT_TARGET=10.15` until native VPN/runtime features require a higher floor | `macos-arm64` build verifies the `arm64` slice; runtime on Apple Silicon Mac |
+| macOS Intel | Latest 5 major versions and latest 10 minor releases on Intel | Same macOS baseline; Flutter Release output is universal and must contain `x86_64` | `macos-x64` build verifies the `x86_64` slice; runtime on Intel Mac, Rosetta, or x64 runner |
 | Windows | Windows 10 and Windows 11 | Flutter Windows desktop target | Parallels Desktop Windows 11 and a Windows 10 VM/image before release |
 | Linux | Debian and Ubuntu desktop/server LTS families | Flutter Linux desktop target with GTK runtime dependencies | Parallels Desktop Linux guest; verify Debian stable and Ubuntu LTS |
 | Web | Current Chrome/Safari/Edge release family for UI-only preview | Flutter Web JS build; WebAssembly warnings are non-blocking until wasm is a release target | macOS host browser |
@@ -97,13 +99,21 @@ Compatibility rules:
   unverified instead of assuming compatibility.
 - Windows/Linux builds must be run inside the target OS. macOS cannot be used as
   proof that Windows/Linux desktop binaries build or launch.
+- macOS support must be recorded separately for Apple Silicon and Intel.
+  Flutter macOS Release builds are universal on this toolchain, so compile
+  evidence must include `lipo -archs` proof for both `arm64` and `x86_64`.
+  Runtime evidence is still separate: Apple Silicon runtime does not prove Intel
+  runtime behavior.
 - Do not run multiple Flutter builds in parallel from different windows. The
   local script serializes builds to avoid Flutter SDK, Gradle, and Xcode lock
   corruption.
 
 Host rules:
 
-- macOS can build/run `macos`, `ios`, `web`, and Android when Android SDK is configured.
+- Apple Silicon macOS can build/run `macos-arm64`, `ios`, `web`, and Android when Android SDK is configured.
+- Apple Silicon macOS can compile-verify `macos-x64` by checking the universal
+  binary `x86_64` slice, but Intel/Rosetta/x64 runner is required for
+  `macos-x64` runtime validation.
 - Linux must be built on Linux.
 - Windows must be built on Windows, for example inside Parallels Desktop.
 - Unsupported targets are reported as skipped/blocking in the queue instead of being treated as success.

@@ -25,16 +25,16 @@ continue_on_error=true
 usage() {
   cat <<'EOF'
 Usage:
-  bash scripts/local-app.sh start   [--target macos|ios|android|linux|windows|web]
-  bash scripts/local-app.sh build   [--targets macos,ios|all]
-  bash scripts/local-app.sh stop    [--targets macos,ios|all]
-  bash scripts/local-app.sh restart [--target macos|ios|android|linux|windows|web]
+  bash scripts/local-app.sh start   [--target macos|macos-arm64|macos-x64|ios|android|linux|windows|web]
+  bash scripts/local-app.sh build   [--targets macos-arm64,ios|all]
+  bash scripts/local-app.sh stop    [--targets macos-arm64,ios|all]
+  bash scripts/local-app.sh restart [--target macos|macos-arm64|macos-x64|ios|android|linux|windows|web]
   bash scripts/local-app.sh status
-  bash scripts/local-app.sh logs    [--target macos|ios|android|linux|windows|web]
+  bash scripts/local-app.sh logs    [--target macos|macos-arm64|macos-x64|ios|android|linux|windows|web]
   bash scripts/local-app.sh doctor
 
 Shortcuts:
-  --macos --ios --android --linux --windows --web
+  --macos --macos-arm64 --macos-x64 --ios --android --linux --windows --web
   --all                  Same as --targets all.
   --targets LIST         Comma-separated target queue.
   --foreground           Run the selected start command in the foreground.
@@ -52,7 +52,9 @@ Environment:
 
 Notes:
   - App runs locally, not in Docker, so Flutter/Dart/Xcode errors stay visible.
-  - On Apple Silicon Macs, macOS and iOS are the primary local verification targets.
+  - On Apple Silicon Macs, macos-arm64 and iOS are the primary local verification targets.
+  - macOS release builds are universal; macos-arm64/macos-x64 verify slices separately.
+  - macos-x64 runtime validation still needs Intel, Rosetta, or an x64 macOS runner.
   - Android requires Android SDK/toolchain.
   - Linux must be built on Linux.
   - Windows must be built on Windows, for example inside Parallels Desktop.
@@ -70,7 +72,7 @@ while [[ $# -gt 0 ]]; do
       targets="all"
       shift
       ;;
-    --macos|--ios|--android|--linux|--windows|--web)
+    --macos|--macos-arm64|--macos-x64|--ios|--android|--linux|--windows|--web)
       value="${1#--}"
       if [[ -z "${targets}" ]]; then
         targets="${value}"
@@ -110,7 +112,7 @@ fi
 expand_targets() {
   local raw="$1"
   if [[ "${raw}" == "all" ]]; then
-    printf '%s\n' macos ios android linux windows web
+    printf '%s\n' macos-arm64 macos-x64 ios android linux windows web
     return 0
   fi
   local item
@@ -130,9 +132,17 @@ host_os() {
   esac
 }
 
+host_arch() {
+  case "$(uname -m 2>/dev/null || echo unknown)" in
+    arm64|aarch64) echo "arm64" ;;
+    x86_64|amd64) echo "x64" ;;
+    *) echo "unknown" ;;
+  esac
+}
+
 validate_target() {
   case "$1" in
-    macos|ios|android|linux|windows|web) return 0 ;;
+    macos|macos-arm64|macos-x64|ios|android|linux|windows|web) return 0 ;;
     *)
       echo "Unknown target: $1" >&2
       return 2
@@ -164,6 +174,12 @@ target_supported_on_host() {
     macos|ios)
       [[ "${os}" == "macos" ]]
       ;;
+    macos-arm64)
+      [[ "${os}" == "macos" && "$(host_arch)" == "arm64" ]]
+      ;;
+    macos-x64)
+      [[ "${os}" == "macos" ]]
+      ;;
     linux)
       [[ "${os}" == "linux" ]]
       ;;
@@ -179,7 +195,16 @@ target_supported_on_host() {
 unsupported_message() {
   local target="$1"
   case "${target}" in
-    macos|ios)
+    macos)
+      echo "macos: requires macOS. Use macos-arm64 on Apple Silicon and macos-x64 on Intel."
+      ;;
+    macos-arm64)
+      echo "macos-arm64: requires an Apple Silicon Mac."
+      ;;
+    macos-x64)
+      echo "macos-x64: requires macOS for build slice verification; runtime validation needs Intel, Rosetta, or an x64 macOS runner."
+      ;;
+    ios)
       echo "${target}: requires macOS + full Xcode."
       ;;
     linux)
@@ -197,6 +222,11 @@ unsupported_message() {
 ensure_target_scaffold() {
   local target="$1"
   local platform="${target}"
+  case "${target}" in
+    macos-arm64|macos-x64)
+      platform="macos"
+      ;;
+  esac
   [[ "${target}" == "web" ]] && platform="web"
   if [[ ! -d "${APP_DIR}/${platform}" ]]; then
     echo "${platform}/ target is missing; generating Flutter scaffold..."
@@ -207,7 +237,7 @@ ensure_target_scaffold() {
 clean_apple_extended_attributes() {
   local target="$1"
   case "${target}" in
-    macos|ios)
+    macos|macos-arm64|macos-x64|ios)
       for path in "${APP_DIR}/macos" "${APP_DIR}/ios" "${APP_DIR}/build/macos" "${APP_DIR}/build/ios"; do
         if [[ -e "${path}" ]]; then
           xattr -cr "${path}" 2>/dev/null || true
@@ -322,11 +352,20 @@ flutter_defines() {
 build_command_for() {
   local target="$1"
   case "${target}" in
-    macos)
+    macos|macos-arm64|macos-x64)
       printf '%s\n' \
         "flutter config --enable-macos-desktop" \
         "flutter pub get" \
-        "flutter build macos $(flutter_defines | xargs)"
+        "flutter build macos $(flutter_defines | xargs)" \
+        "lipo -archs build/macos/Build/Products/Release/livemask_app.app/Contents/MacOS/livemask_app"
+      case "${target}" in
+        macos-arm64)
+          printf '%s\n' "lipo -archs build/macos/Build/Products/Release/livemask_app.app/Contents/MacOS/livemask_app | grep -qw arm64"
+          ;;
+        macos-x64)
+          printf '%s\n' "lipo -archs build/macos/Build/Products/Release/livemask_app.app/Contents/MacOS/livemask_app | grep -qw x86_64"
+          ;;
+      esac
       ;;
     ios)
       printf '%s\n' \
@@ -366,7 +405,11 @@ start_command_for() {
     run_device="${device_id}"
   fi
   case "${target}" in
-    macos)
+    macos|macos-arm64|macos-x64)
+      if [[ "${target}" == "macos-x64" && "$(host_arch)" != "x64" ]]; then
+        printf '%s\n' "echo 'macos-x64 runtime validation requires Intel, Rosetta, or an x64 macOS runner.' >&2" "exit 78"
+        return 0
+      fi
       printf '%s\n' \
         "flutter config --enable-macos-desktop" \
         "flutter pub get" \
@@ -496,7 +539,7 @@ run_for_targets() {
 
 status_all() {
   local target
-  for target in macos ios android linux windows web; do
+  for target in macos-arm64 macos-x64 ios android linux windows web; do
     if is_running_target "${target}"; then
       echo "${target}: running (pid=$(cat "$(pid_file_for "${target}")")) logs=$(log_file_for "${target}")"
     else
@@ -542,7 +585,7 @@ case "${command}" in
     echo
     echo "Host OS: $(host_os)"
     echo "Supported here:"
-    for target in macos ios android linux windows web; do
+    for target in macos-arm64 macos-x64 ios android linux windows web; do
       if target_supported_on_host "${target}"; then
         echo "- ${target}"
       else
