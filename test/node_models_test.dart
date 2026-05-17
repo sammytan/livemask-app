@@ -46,6 +46,51 @@ void main() {
       expect(node.lastHeartbeatAt, null);
     });
 
+    test('fromJson parses id (Backend primary key)', () {
+      final json = {
+        'id': 'node-abc',
+        'node_name': 'Id Test',
+        'status': 'online',
+        'load_score': 0.5,
+        'cpu_usage': 30,
+        'memory_usage': 40,
+        'active_connections': 50,
+        'degraded': false,
+      };
+      final node = NodeInfo.fromJson(json);
+      expect(node.nodeId, 'node-abc');
+    });
+
+    test('fromJson falls back to node_id when id is absent', () {
+      final json = {
+        'node_id': 'node-xyz',
+        'node_name': 'Fallback',
+        'status': 'online',
+        'load_score': 0.5,
+        'cpu_usage': 30,
+        'memory_usage': 40,
+        'active_connections': 50,
+        'degraded': false,
+      };
+      final node = NodeInfo.fromJson(json);
+      expect(node.nodeId, 'node-xyz');
+    });
+
+    test('fromJson handles integer id', () {
+      final json = {
+        'id': 42,
+        'node_name': 'Int Id',
+        'status': 'online',
+        'load_score': 0.5,
+        'cpu_usage': 30,
+        'memory_usage': 40,
+        'active_connections': 50,
+        'degraded': false,
+      };
+      final node = NodeInfo.fromJson(json);
+      expect(node.nodeId, '42');
+    });
+
     test('fromJson handles empty/missing fields with defaults', () {
       final node = NodeInfo.fromJson(<String, dynamic>{});
       expect(node.nodeId, '');

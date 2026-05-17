@@ -39,7 +39,7 @@ void main() {
       }
     });
 
-    test('fetchRecommended returns healthy nodes sorted by load', () async {
+    test('fetchRecommended returns healthy nodes sorted by load ASC', () async {
       final response = await client.fetchRecommended();
 
       expect(response.isEmpty, false);
@@ -49,13 +49,21 @@ void main() {
         expect(node.isOnline, true);
       }
 
-      // Verify sort by load score ascending.
+      // Verify sort by load score ascending (lowest load first).
       for (int i = 0; i < response.nodes.length - 1; i++) {
         expect(
           response.nodes[i].loadScore <= response.nodes[i + 1].loadScore,
           true,
+          reason:
+              'Recommended nodes must be sorted by load_score ASC. '
+              'Node at index $i has load ${response.nodes[i].loadScore} '
+              'but node at index ${i + 1} has load ${response.nodes[i + 1].loadScore}.',
         );
       }
+
+      // The first (best) node must have the lowest load_score among all.
+      final loads = response.nodes.map((n) => n.loadScore).toList();
+      expect(response.nodes.first.loadScore, loads.reduce((a, b) => a < b ? a : b));
     });
 
     test('fetchRecommended excludes degraded nodes', () async {

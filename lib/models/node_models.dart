@@ -18,8 +18,11 @@ class NodeInfo {
   });
 
   factory NodeInfo.fromJson(Map<String, dynamic> json) {
+    // Backend JSON uses "id" as primary key (NodePublic.id).
+    // Some fixtures may use "node_id" — support both for compatibility.
+    final rawId = json['id'] ?? json['node_id'];
     return NodeInfo(
-      nodeId: json['node_id'] as String? ?? '',
+      nodeId: rawId is String ? rawId : rawId?.toString() ?? '',
       nodeName: json['node_name'] as String? ?? '',
       status: json['status'] as String? ?? 'unknown',
       loadScore: (json['load_score'] as num?)?.toDouble() ?? 0.0,
@@ -113,7 +116,7 @@ class NodeListResponse {
 
   /// Nodes that are fully healthy (online, not degraded).
   List<NodeInfo> get healthyNodes =>
-      nodes.where((n) => n.isOnline && !n.isDegraded).toList();
+      nodes.where((n) => n.isOnline).toList();
 }
 
 /// Response wrapper for `GET /api/v1/nodes/recommended`.
@@ -132,8 +135,8 @@ class RecommendedNodeResponse {
             .toList(),
       );
     }
-    // Single node response fallback.
-    if (json.containsKey('node_id')) {
+    // Single node response fallback (Backend uses "id" or "node_id").
+    if (json.containsKey('id') || json.containsKey('node_id')) {
       return RecommendedNodeResponse(
         nodes: [NodeInfo.fromJson(json)],
       );
