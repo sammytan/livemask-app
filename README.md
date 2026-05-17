@@ -4,6 +4,13 @@ Multi-platform VPN Client (Flutter + sing-box)
 
 See full AI rules and setup in livemask-docs: https://github.com/MyAiDevs/livemask-docs
 
+For local build/run troubleshooting, Cursor and Codex must also read:
+
+```text
+../livemask-docs/docs/app/APP_PLATFORM_COMPATIBILITY_MATRIX.md
+../livemask-docs/docs/app/APP_LOCAL_BUILD_AND_TROUBLESHOOTING.md
+```
+
 ## Mandatory design source for UI work
 
 Before changing any user-visible App UI, read the current App design handoff in

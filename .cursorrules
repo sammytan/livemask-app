@@ -23,6 +23,8 @@ No files changed.
 ## App / Client Specific Rules
 @../livemask-docs/ai-rules/v3.7/06-Client-App-Specific-Rules.md
 @../livemask-docs/ai-rules/v3.7/02-Closed-Loop-Validation.md
+@../livemask-docs/docs/app/APP_PLATFORM_COMPATIBILITY_MATRIX.md
+@../livemask-docs/docs/app/APP_LOCAL_BUILD_AND_TROUBLESHOOTING.md
 
 ## Mandatory App Design Inputs
 Before implementing or changing any user-visible App UI, read and explicitly
@@ -67,6 +69,37 @@ Never implement daily development directly on `main`; `main` is staging/pre-rele
 Production work must come from a GitHub Release / `v*` tag, not from an ad hoc branch.
 `task-unlocked` is only a development coordination signal; never use it to trigger `livemask-ci-cd`.
 Always verify Onboarding flow, GEOIP sync, and sing-box config compatibility with Backend and NodeAgent.
+
+## Local Build / Runtime Rules
+
+Use `scripts/local-app.sh` for all local App build/run/status/log workflows.
+Do not invent ad hoc Flutter commands in completion reports unless the script is
+insufficient and the reason is documented.
+
+Mandatory references for platform work:
+
+- @../livemask-docs/docs/app/APP_PLATFORM_COMPATIBILITY_MATRIX.md
+- @../livemask-docs/docs/app/APP_LOCAL_BUILD_AND_TROUBLESHOOTING.md
+
+Rules:
+
+1. Use repository-relative paths in committed files. Do not commit absolute
+   local paths such as `/Users/<name>/Documents/...`.
+2. Do not run multiple Flutter builds in parallel. The script serializes builds
+   with `.local-dev/run/build.lock`.
+3. Report macOS Apple Silicon and macOS Intel separately:
+   `macos-arm64` and `macos-x64`.
+4. `macos-x64` compile evidence requires `lipo -archs` showing `x86_64`.
+   Runtime evidence still requires Intel, Rosetta, or an x64 macOS runner.
+5. iOS simulator builds use the `/private/tmp/livemask-app-ios-$USER` safe
+   mirror. Physical iPhone runs require Xcode signing.
+6. Android physical devices must show as `device` in `adb devices -l`; if the
+   state is `unauthorized`, stop and ask the user to accept the USB debugging
+   prompt.
+7. Windows and Linux must be built and run inside those operating systems; macOS
+   cannot be used as proof.
+8. Completion reports for platform-related work must include a target matrix
+   covering macos-arm64, macos-x64, ios, android, windows, linux, and web.
 
 ## Task Completion Report
 When a task or subtask is complete, use the standard completion report from:
