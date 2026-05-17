@@ -8,22 +8,55 @@ class MockTokenStorage extends FlutterSecureStorage {
   final Map<String, String> _store = {};
 
   @override
-  Future<void> write({required String key, required String? value}) async {
+  Future<void> write({
+    required String key,
+    required String? value,
+    IOSOptions? iOptions,
+    AndroidOptions? aOptions,
+    LinuxOptions? lOptions,
+    WebOptions? webOptions,
+    MacOsOptions? mOptions,
+    WindowsOptions? wOptions,
+  }) async {
     if (value != null) _store[key] = value;
   }
 
   @override
-  Future<String?> read({required String key}) async {
+  Future<String?> read({
+    required String key,
+    IOSOptions? iOptions,
+    AndroidOptions? aOptions,
+    LinuxOptions? lOptions,
+    WebOptions? webOptions,
+    MacOsOptions? mOptions,
+    WindowsOptions? wOptions,
+  }) async {
     return _store[key];
   }
 
   @override
-  Future<void> delete({required String key}) async {
+  Future<void> delete({
+    required String key,
+    IOSOptions? iOptions,
+    AndroidOptions? aOptions,
+    LinuxOptions? lOptions,
+    WebOptions? webOptions,
+    MacOsOptions? mOptions,
+    WindowsOptions? wOptions,
+  }) async {
     _store.remove(key);
   }
 
   @override
-  Future<bool> containsKey({required String key}) async {
+  Future<bool> containsKey({
+    required String key,
+    IOSOptions? iOptions,
+    AndroidOptions? aOptions,
+    LinuxOptions? lOptions,
+    WebOptions? webOptions,
+    MacOsOptions? mOptions,
+    WindowsOptions? wOptions,
+  }) async {
     return _store.containsKey(key);
   }
 }
@@ -35,7 +68,8 @@ void main() {
 
     setUp(() {
       storage = TokenStorage(secureStorage: MockTokenStorage());
-      service = AuthService(storage: storage); // uses MockAuthApiClient by default
+      service =
+          AuthService(storage: storage); // uses MockAuthApiClient by default
     });
 
     test('login succeeds with valid credentials', () async {

@@ -111,5 +111,5 @@ class _MockAdapter implements HttpClientAdapter {
   }
 
   @override
-  void close() {}
+  void close({bool force = false}) {}
 }

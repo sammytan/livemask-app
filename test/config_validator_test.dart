@@ -91,7 +91,7 @@ void main() {
       // The canonical JSON is: {"connection":{"recommendation_ttl_seconds":60}}
       // SHA-256 of that:
       const expectedHash =
-          'sha256:f88fd88e0e0d9ccf1ae09bbaa0b5e34eab7e0c5b0aaa2d5e85b3ffa6a3c5d36e';
+          'sha256:1a6865a2bd16fd5c14af142ff0d415b9ef4a4bf0bacbc47de7b8d6c6e31b850b';
 
       final result = validator.verifyPayloadHash(payload, expectedHash);
       expect(result, true);

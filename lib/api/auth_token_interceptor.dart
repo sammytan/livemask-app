@@ -13,11 +13,14 @@ class AuthTokenInterceptor extends Interceptor {
   AuthTokenInterceptor({
     required TokenStorage tokenStorage,
     required Future<LoginResponse> Function() onRefresh,
+    Dio? retryClient,
   })  : _tokenStorage = tokenStorage,
-        _onRefresh = onRefresh;
+        _onRefresh = onRefresh,
+        _retryClient = retryClient;
 
   final TokenStorage _tokenStorage;
   final Future<LoginResponse> Function() _onRefresh;
+  final Dio? _retryClient;
   bool _isRefreshing = false;
 
   @override
@@ -56,6 +59,11 @@ class AuthTokenInterceptor extends Interceptor {
       return handler.next(err);
     }
 
+    final refreshToken = await _tokenStorage.readRefreshToken();
+    if (refreshToken == null || refreshToken.isEmpty) {
+      return handler.next(err);
+    }
+
     _isRefreshing = true;
     try {
       final refreshResult = await _onRefresh();
@@ -70,7 +78,7 @@ class AuthTokenInterceptor extends Interceptor {
       final retryOptions = err.requestOptions;
       retryOptions.headers['Authorization'] =
           'Bearer ${refreshResult.accessToken}';
-      final dio = Dio(); // fresh Dio for retry
+      final dio = _retryClient ?? Dio();
       final retryResponse = await dio.fetch<void>(retryOptions);
 
       _isRefreshing = false;

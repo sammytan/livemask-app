@@ -25,5 +25,20 @@ android/local.properties
 # iOS/macOS
 ios/Pods/
 ios/.symlinks/
+ios/Flutter/ephemeral/
+!ios/Flutter/AppFrameworkInfo.plist
+!ios/Flutter/Debug.xcconfig
+!ios/Flutter/Release.xcconfig
+!ios/Flutter/Generated.xcconfig
+!ios/Flutter/flutter_export_environment.sh
+!ios/Flutter/Flutter.podspec
+!ios/Runner/GeneratedPluginRegistrant.h
+!ios/Runner/GeneratedPluginRegistrant.m
 macos/Pods/
 macos/.symlinks/
+macos/Flutter/ephemeral/
+!macos/Flutter/Debug.xcconfig
+!macos/Flutter/Release.xcconfig
+!macos/Flutter/Flutter-Debug.xcconfig
+!macos/Flutter/Flutter-Release.xcconfig
+!macos/Flutter/GeneratedPluginRegistrant.swift

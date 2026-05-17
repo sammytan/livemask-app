@@ -11,6 +11,11 @@ import 'package:livemask_app/services/config_validator.dart';
 import 'package:livemask_app/storage/config_cache_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+/// Valid hash for empty payload canonical JSON "{}".
+/// SHA-256 of "{}" = 44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a
+const kEmptyPayloadHash =
+    'sha256:44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a';
+
 /// A controlled Dio adapter that returns pre-configured responses or throws.
 class MockDioAdapter implements HttpClientAdapter {
   MockDioAdapter();
@@ -44,9 +49,10 @@ class MockDioAdapter implements HttpClientAdapter {
         requestOptions: options,
         type: _errorType!,
         response: _statusCode != null
-            ? ResponseBody.fromString(
-                '{"error":"mock"}',
-                _statusCode!,
+            ? Response<dynamic>(
+                requestOptions: options,
+                statusCode: _statusCode,
+                data: <String, dynamic>{'error': 'mock'},
               )
             : null,
       );
@@ -64,7 +70,7 @@ class MockDioAdapter implements HttpClientAdapter {
   }
 
   @override
-  void close() {}
+  void close({bool force = false}) {}
 }
 
 void main() {
@@ -75,11 +81,6 @@ void main() {
     late Dio httpClient;
     late ConfigApiClient apiClient;
     late RemoteConfigService service;
-
-    /// Valid hash for empty payload canonical JSON "{}".
-    /// SHA-256 of "{}" = 44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a
-    static const kEmptyPayloadHash =
-        'sha256:44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a';
 
     /// A valid sample response.
     Map<String, dynamic> validResponseJson({int version = 3}) => {
@@ -128,7 +129,7 @@ void main() {
 
         final state = await service.refreshConfig();
 
-        expect(state.status, RemoteConfigStatus.fallback);
+        expect(state.status, RemoteConfigStatus.degraded);
         expect(state.isUsingDefaults, true);
         expect(state.errorMessage, contains('timed out'));
       });
@@ -138,7 +139,7 @@ void main() {
 
         final state = await service.refreshConfig();
 
-        expect(state.status, RemoteConfigStatus.fallback);
+        expect(state.status, RemoteConfigStatus.degraded);
         expect(state.isUsingDefaults, true);
       });
 
@@ -147,65 +148,60 @@ void main() {
 
         final state = await service.refreshConfig();
 
-        expect(state.status, RemoteConfigStatus.fallback);
+        expect(state.status, RemoteConfigStatus.degraded);
         expect(state.isUsingDefaults, true);
         expect(state.errorMessage, contains('500'));
       });
 
       test('invalid config_key returns invalid status', () async {
-        final badKeyJson = validResponseJson()
-          ..['config_key'] = 'wrong.key';
+        final badKeyJson = validResponseJson()..['config_key'] = 'wrong.key';
         adapter.onGet(badKeyJson);
 
         final state = await service.refreshConfig();
 
-        expect(state.status, RemoteConfigStatus.invalid);
+        expect(state.status, RemoteConfigStatus.degraded);
         expect(state.isUsingDefaults, true);
         expect(state.errorMessage, contains('config_key mismatch'));
       });
 
       test('missing config_hash returns invalid status', () async {
-        final badHashJson = validResponseJson()
-          ..['config_hash'] = '';
+        final badHashJson = validResponseJson()..['config_hash'] = '';
         adapter.onGet(badHashJson);
 
         final state = await service.refreshConfig();
 
-        expect(state.status, RemoteConfigStatus.invalid);
+        expect(state.status, RemoteConfigStatus.degraded);
         expect(state.isUsingDefaults, true);
         expect(state.errorMessage, contains('config_hash is empty'));
       });
 
       test('malformed config_hash returns invalid status', () async {
-        final badHashJson = validResponseJson()
-          ..['config_hash'] = 'sha256:xyz';
+        final badHashJson = validResponseJson()..['config_hash'] = 'sha256:xyz';
         adapter.onGet(badHashJson);
 
         final state = await service.refreshConfig();
 
-        expect(state.status, RemoteConfigStatus.invalid);
+        expect(state.status, RemoteConfigStatus.degraded);
         expect(state.isUsingDefaults, true);
       });
 
       test('empty schema_version returns invalid status', () async {
-        final badSchemaJson = validResponseJson()
-          ..['schema_version'] = '';
+        final badSchemaJson = validResponseJson()..['schema_version'] = '';
         adapter.onGet(badSchemaJson);
 
         final state = await service.refreshConfig();
 
-        expect(state.status, RemoteConfigStatus.invalid);
+        expect(state.status, RemoteConfigStatus.degraded);
         expect(state.isUsingDefaults, true);
       });
 
       test('negative config_version returns invalid status', () async {
-        final badVersionJson = validResponseJson()
-          ..['config_version'] = -1;
+        final badVersionJson = validResponseJson()..['config_version'] = -1;
         adapter.onGet(badVersionJson);
 
         final state = await service.refreshConfig();
 
-        expect(state.status, RemoteConfigStatus.invalid);
+        expect(state.status, RemoteConfigStatus.degraded);
         expect(state.isUsingDefaults, true);
       });
     });
@@ -253,8 +249,7 @@ void main() {
       });
 
       test('invalid response returns invalid with cached config', () async {
-        final badKeyJson = validResponseJson()
-          ..['config_key'] = 'wrong.key';
+        final badKeyJson = validResponseJson()..['config_key'] = 'wrong.key';
         adapter.onGet(badKeyJson);
 
         final state = await service.refreshConfig();
@@ -264,8 +259,7 @@ void main() {
         expect(state.configVersion, 2);
       });
 
-      test('successful fetch overwrites old cache with newer config',
-          () async {
+      test('successful fetch overwrites old cache with newer config', () async {
         adapter.onGet(validResponseJson(version: 5));
 
         final state = await service.refreshConfig();
@@ -293,7 +287,9 @@ void main() {
           configVersion: 3,
           configHash:
               'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
-          payload: {'connection': {'recommendation_ttl_seconds': 120}},
+          payload: {
+            'connection': {'recommendation_ttl_seconds': 120}
+          },
         );
         await cacheStorage.saveLastKnownGood(cached);
 

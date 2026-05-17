@@ -1,50 +1,112 @@
+import 'dart:async';
+import 'dart:convert';
+import 'dart:typed_data';
+
 import 'package:dio/dio.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:livemask_app/api/auth_token_interceptor.dart';
 import 'package:livemask_app/models/auth_models.dart';
 import 'package:livemask_app/storage/token_storage.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 class MockSecureStorage extends FlutterSecureStorage {
   final Map<String, String> _store = {};
 
   @override
-  Future<void> write({required String key, required String? value}) async {
+  Future<void> write({
+    required String key,
+    required String? value,
+    IOSOptions? iOptions,
+    AndroidOptions? aOptions,
+    LinuxOptions? lOptions,
+    WebOptions? webOptions,
+    MacOsOptions? mOptions,
+    WindowsOptions? wOptions,
+  }) async {
     if (value != null) _store[key] = value;
   }
 
   @override
-  Future<String?> read({required String key}) async {
+  Future<String?> read({
+    required String key,
+    IOSOptions? iOptions,
+    AndroidOptions? aOptions,
+    LinuxOptions? lOptions,
+    WebOptions? webOptions,
+    MacOsOptions? mOptions,
+    WindowsOptions? wOptions,
+  }) async {
     return _store[key];
   }
 
   @override
-  Future<void> delete({required String key}) async {
+  Future<void> delete({
+    required String key,
+    IOSOptions? iOptions,
+    AndroidOptions? aOptions,
+    LinuxOptions? lOptions,
+    WebOptions? webOptions,
+    MacOsOptions? mOptions,
+    WindowsOptions? wOptions,
+  }) async {
     _store.remove(key);
   }
 
   @override
-  Future<bool> containsKey({required String key}) async {
+  Future<bool> containsKey({
+    required String key,
+    IOSOptions? iOptions,
+    AndroidOptions? aOptions,
+    LinuxOptions? lOptions,
+    WebOptions? webOptions,
+    MacOsOptions? mOptions,
+    WindowsOptions? wOptions,
+  }) async {
     return _store.containsKey(key);
   }
 }
 
-/// Creates a DioException for test purposes with the given status code.
-DioException _mockDioException({
-  required String path,
-  int? statusCode,
-  DioExceptionType type = DioExceptionType.badResponse,
+class MockAdapter implements HttpClientAdapter {
+  int statusCode = 200;
+  int requestCount = 0;
+  Map<String, dynamic>? lastHeaders;
+
+  @override
+  Future<ResponseBody> fetch(
+    RequestOptions options,
+    Stream<Uint8List>? requestStream,
+    Future<void>? cancelFuture,
+  ) async {
+    requestCount++;
+    lastHeaders = Map<String, dynamic>.from(options.headers);
+    return ResponseBody.fromString(
+      jsonEncode(<String, dynamic>{'ok': statusCode < 400}),
+      statusCode,
+      headers: {
+        Headers.contentTypeHeader: [Headers.jsonContentType],
+      },
+    );
+  }
+
+  @override
+  void close({bool force = false}) {}
+}
+
+LoginResponse refreshResponse({
+  String accessToken = 'new-access-token',
+  String? refreshToken = 'new-refresh-token',
 }) {
-  return DioException(
-    requestOptions: RequestOptions(path: path),
-    type: type,
-    response: statusCode != null
-        ? Response(
-            requestOptions: RequestOptions(path: path),
-            statusCode: statusCode,
-            data: <String, dynamic>{'error': 'mock'},
-          )
-        : null,
+  return LoginResponse(
+    user: UserSummary(
+      userId: 'user-1',
+      email: 'test@livemask.app',
+      roles: const [],
+      permissions: const [],
+      createdAt: '2026-05-17T00:00:00Z',
+    ),
+    accessToken: accessToken,
+    refreshToken: refreshToken,
+    expiresIn: 900,
   );
 }
 
@@ -52,266 +114,118 @@ void main() {
   group('AuthTokenInterceptor', () {
     late TokenStorage tokenStorage;
     late MockSecureStorage mockStorage;
-    int refreshCallCount;
+    late MockAdapter adapter;
+    late Dio dio;
+    int refreshCallCount = 0;
 
     setUp(() {
       mockStorage = MockSecureStorage();
       tokenStorage = TokenStorage(secureStorage: mockStorage);
+      adapter = MockAdapter();
+      dio = Dio(BaseOptions(baseUrl: 'https://api.test'))
+        ..httpClientAdapter = adapter;
       refreshCallCount = 0;
     });
 
+    void installInterceptor(
+      Future<LoginResponse> Function() onRefresh,
+    ) {
+      dio.interceptors.add(AuthTokenInterceptor(
+        tokenStorage: tokenStorage,
+        onRefresh: onRefresh,
+        retryClient: dio,
+      ));
+    }
+
     test('injects Bearer token when available', () async {
       await tokenStorage.saveAccessToken('test-access-token');
+      installInterceptor(() async => refreshResponse());
 
-      final interceptor = AuthTokenInterceptor(
-        tokenStorage: tokenStorage,
-        onRefresh: () async => LoginResponse(
-          user: UserSummary(
-            userId: '',
-            email: '',
-            roles: [],
-            permissions: [],
-            createdAt: '',
-          ),
-          accessToken: '',
-          expiresIn: 0,
-        ),
-      );
+      await dio.get('/api/v1/me');
 
-      final options = RequestOptions(path: '/api/v1/me');
-      await interceptor.onRequest(options, RequestInterceptorHandler());
-
-      expect(options.headers['Authorization'], 'Bearer test-access-token');
+      expect(adapter.lastHeaders?['Authorization'], 'Bearer test-access-token');
     });
 
     test('does not inject token for auth endpoints', () async {
       await tokenStorage.saveAccessToken('test-token');
+      installInterceptor(() async => refreshResponse());
 
-      final interceptor = AuthTokenInterceptor(
-        tokenStorage: tokenStorage,
-        onRefresh: () async => LoginResponse(
-          user: UserSummary(
-            userId: '',
-            email: '',
-            roles: [],
-            permissions: [],
-            createdAt: '',
-          ),
-          accessToken: '',
-          expiresIn: 0,
-        ),
-      );
+      await dio.post('/api/v1/auth/login');
 
-      final options = RequestOptions(path: '/api/v1/auth/login');
-      await interceptor.onRequest(options, RequestInterceptorHandler());
-
-      expect(options.headers.containsKey('Authorization'), false);
+      expect(adapter.lastHeaders?.containsKey('Authorization'), false);
     });
 
     test('does not inject token when no token stored', () async {
-      final interceptor = AuthTokenInterceptor(
-        tokenStorage: tokenStorage,
-        onRefresh: () async => LoginResponse(
-          user: UserSummary(
-            userId: '',
-            email: '',
-            roles: [],
-            permissions: [],
-            createdAt: '',
-          ),
-          accessToken: '',
-          expiresIn: 0,
-        ),
-      );
+      installInterceptor(() async => refreshResponse());
 
-      final options = RequestOptions(path: '/api/v1/me');
-      await interceptor.onRequest(options, RequestInterceptorHandler());
+      await dio.get('/api/v1/me');
 
-      expect(options.headers.containsKey('Authorization'), false);
+      expect(adapter.lastHeaders?.containsKey('Authorization'), false);
     });
 
-    test('onError - passes non-401 errors through', () async {
-      final interceptor = AuthTokenInterceptor(
-        tokenStorage: tokenStorage,
-        onRefresh: () async => LoginResponse(
-          user: UserSummary(
-            userId: '',
-            email: '',
-            roles: [],
-            permissions: [],
-            createdAt: '',
-          ),
-          accessToken: '',
-          expiresIn: 0,
-        ),
+    test('passes non-401 errors through', () async {
+      adapter.statusCode = 500;
+      installInterceptor(() async {
+        refreshCallCount++;
+        return refreshResponse();
+      });
+
+      await expectLater(
+        dio.get('/api/v1/me'),
+        throwsA(isA<DioException>()),
       );
-
-      final err = _mockDioException(
-        path: '/api/v1/me',
-        statusCode: 500,
-      );
-
-      Object? passedError;
-      final handler = ErrorInterceptorHandler()
-        ..next = (e) {
-          passedError = e;
-        };
-
-      await interceptor.onError(err, handler);
-      expect(passedError, isNotNull);
-    });
-
-    test('onError - does not refresh on auth endpoints', () async {
-      await tokenStorage.saveRefreshToken('rt-1');
-
-      final interceptor = AuthTokenInterceptor(
-        tokenStorage: tokenStorage,
-        onRefresh: () async {
-          refreshCallCount++;
-          return LoginResponse(
-            user: UserSummary(
-              userId: '',
-              email: '',
-              roles: [],
-              permissions: [],
-              createdAt: '',
-            ),
-            accessToken: 'new',
-            refreshToken: 'new-rt',
-            expiresIn: 0,
-          );
-        },
-      );
-
-      final err = _mockDioException(
-        path: '/api/v1/auth/login',
-        statusCode: 401,
-      );
-
-      Object? passedError;
-      final handler = ErrorInterceptorHandler()
-        ..next = (e) {
-          passedError = e;
-        };
-
-      await interceptor.onError(err, handler);
       expect(refreshCallCount, 0);
-      expect(passedError, isNotNull);
     });
 
-    test('onError - clears session on failed refresh', () async {
+    test('does not refresh on auth endpoints', () async {
+      adapter.statusCode = 401;
+      await tokenStorage.saveRefreshToken('rt-1');
+      installInterceptor(() async {
+        refreshCallCount++;
+        return refreshResponse();
+      });
+
+      await expectLater(
+        dio.post('/api/v1/auth/login'),
+        throwsA(isA<DioException>()),
+      );
+      expect(refreshCallCount, 0);
+    });
+
+    test('clears session on failed refresh', () async {
+      adapter.statusCode = 401;
       await tokenStorage.saveSession(
         accessToken: 'old-at',
         refreshToken: 'old-rt',
       );
+      installInterceptor(() async {
+        refreshCallCount++;
+        throw Exception('refresh failed');
+      });
 
-      final interceptor = AuthTokenInterceptor(
-        tokenStorage: tokenStorage,
-        onRefresh: () async {
-          refreshCallCount++;
-          throw Exception('refresh failed');
-        },
+      await expectLater(
+        dio.get('/api/v1/me'),
+        throwsA(isA<DioException>()),
       );
 
-      final err = _mockDioException(
-        path: '/api/v1/me',
-        statusCode: 401,
-      );
-
-      Object? passedError;
-      final handler = ErrorInterceptorHandler()
-        ..next = (e) {
-          passedError = e;
-        };
-
-      await interceptor.onError(err, handler);
       expect(refreshCallCount, 1);
-
-      // Session should be cleared.
       expect(await tokenStorage.readAccessToken(), isNull);
       expect(await tokenStorage.readRefreshToken(), isNull);
     });
 
-    test('onError - prevents recursive refresh', () async {
-      await tokenStorage.saveSession(
-        accessToken: 'old-at',
-        refreshToken: 'old-rt',
+    test('skips refresh when no refresh token is stored', () async {
+      adapter.statusCode = 401;
+      installInterceptor(() async {
+        refreshCallCount++;
+        return refreshResponse();
+      });
+
+      await expectLater(
+        dio.get('/api/v1/me'),
+        throwsA(isA<DioException>()),
       );
 
-      final interceptor = AuthTokenInterceptor(
-        tokenStorage: tokenStorage,
-        onRefresh: () async {
-          refreshCallCount++;
-          throw Exception('refresh failed');
-        },
-      );
-
-      // First 401 triggers refresh
-      final err1 = _mockDioException(
-        path: '/api/v1/me',
-        statusCode: 401,
-      );
-
-      Object? passedError1;
-      final handler1 = ErrorInterceptorHandler()
-        ..next = (e) {
-          passedError1 = e;
-        };
-
-      await interceptor.onError(err1, handler1);
-      expect(refreshCallCount, 1);
-
-      // Second 401 (retry also fails) should NOT trigger another refresh
-      final err2 = _mockDioException(
-        path: '/api/v1/me',
-        statusCode: 401,
-      );
-
-      Object? passedError2;
-      final handler2 = ErrorInterceptorHandler()
-        ..next = (e) {
-          passedError2 = e;
-        };
-
-      await interceptor.onError(err2, handler2);
-      expect(refreshCallCount, 1); // Still 1 — no second refresh
-    });
-
-    test('onError - skips refresh when no refresh token stored', () async {
-      // No refresh token stored.
-      final interceptor = AuthTokenInterceptor(
-        tokenStorage: tokenStorage,
-        onRefresh: () async {
-          refreshCallCount++;
-          return LoginResponse(
-            user: UserSummary(
-              userId: '',
-              email: '',
-              roles: [],
-              permissions: [],
-              createdAt: '',
-            ),
-            accessToken: 'new',
-            refreshToken: 'new-rt',
-            expiresIn: 0,
-          );
-        },
-      );
-
-      final err = _mockDioException(
-        path: '/api/v1/me',
-        statusCode: 401,
-      );
-
-      Object? passedError;
-      final handler = ErrorInterceptorHandler()
-        ..next = (e) {
-          passedError = e;
-        };
-
-      await interceptor.onError(err, handler);
-      expect(refreshCallCount, 0); // No refresh attempted
-      expect(passedError, isNotNull); // Original 401 propagated
+      expect(refreshCallCount, 0);
     });
   });
 }

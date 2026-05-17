@@ -198,6 +198,20 @@ ensure_target_scaffold() {
   fi
 }
 
+clean_apple_extended_attributes() {
+  local target="$1"
+  case "${target}" in
+    macos|ios)
+      for path in "${APP_DIR}/macos" "${APP_DIR}/ios" "${APP_DIR}/build/macos" "${APP_DIR}/build/ios"; do
+        if [[ -e "${path}" ]]; then
+          xattr -cr "${path}" 2>/dev/null || true
+          find "${path}" -name .DS_Store -delete 2>/dev/null || true
+        fi
+      done
+      ;;
+  esac
+}
+
 pid_file_for() {
   printf '%s/%s.pid' "${RUN_DIR}" "$1"
 }
@@ -340,6 +354,7 @@ execute_command_queue() {
   require_flutter || return $?
 
   ensure_target_scaffold "${target}" || return $?
+  clean_apple_extended_attributes "${target}"
 
   local generator
   if [[ "${command_kind}" == "build" ]]; then

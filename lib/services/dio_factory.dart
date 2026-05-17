@@ -12,10 +12,8 @@ class DioFactory {
   /// Creates a plain [Dio] with default options (no auth interceptor).
   static Dio createPlainDio() {
     return Dio(BaseOptions(
-      connectTimeout:
-          Duration(seconds: AppConfig.connectTimeoutSeconds),
-      receiveTimeout:
-          Duration(seconds: AppConfig.receiveTimeoutSeconds),
+      connectTimeout: Duration(seconds: AppConfig.connectTimeoutSeconds),
+      receiveTimeout: Duration(seconds: AppConfig.receiveTimeoutSeconds),
       headers: {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
@@ -32,6 +30,7 @@ class DioFactory {
     dio.interceptors.add(AuthTokenInterceptor(
       tokenStorage: tokenStorage,
       onRefresh: onRefresh,
+      retryClient: dio,
     ));
     return dio;
   }
