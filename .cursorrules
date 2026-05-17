@@ -24,6 +24,35 @@ No files changed.
 @../livemask-docs/ai-rules/v3.7/06-Client-App-Specific-Rules.md
 @../livemask-docs/ai-rules/v3.7/02-Closed-Loop-Validation.md
 
+## Mandatory App Design Inputs
+Before implementing or changing any user-visible App UI, read and explicitly
+map the work to these design sources:
+
+- @../livemask-docs/docs/app/LIVEMASK_APP_DESIGN_BRIEF_FOR_ATOMS.md
+- @../livemask-docs/design/app/README.md
+- @../livemask-docs/design/app/atoms/v2/README.md
+- @../livemask-docs/design/app/atoms/v2/export/.wiki.md
+
+Rules:
+
+1. Treat `../livemask-docs/design/app/atoms/v2/` as the current App UI design
+   fact source for mobile and desktop surfaces.
+2. Do not copy Atoms/React/Atoms Cloud runtime code directly into Flutter.
+   Translate the visual hierarchy, states, copy, spacing, components, and screen
+   flows into Flutter widgets and local App architecture.
+3. If a TASK touches Splash, Onboarding, Login, Home/Connect, Nodes, Plan,
+   Diagnostics, Profile/Settings, desktop windows, menu bar, tray, or permission
+   recovery UI, the completion report must include a `Design Alignment` section
+   naming the design source paths used.
+4. If no matching design exists, stop UI implementation and report:
+
+```text
+BLOCKED: App UI design handoff missing for <screen/flow>.
+Current repo: livemask-app
+Required source: livemask-docs/design/app/atoms/<version>
+No UI files changed.
+```
+
 ## Multi-Window Development
 This window is for **Flutter App** development.
 You may use `gh` commands to operate GitHub API, Issues, Actions, `workflow_dispatch`, and `repository_dispatch`.

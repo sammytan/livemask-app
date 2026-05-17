@@ -4,6 +4,22 @@ Multi-platform VPN Client (Flutter + sing-box)
 
 See full AI rules and setup in livemask-docs: https://github.com/MyAiDevs/livemask-docs
 
+## Mandatory design source for UI work
+
+Before changing any user-visible App UI, read the current App design handoff in
+`livemask-docs`:
+
+```text
+../livemask-docs/docs/app/LIVEMASK_APP_DESIGN_BRIEF_FOR_ATOMS.md
+../livemask-docs/design/app/README.md
+../livemask-docs/design/app/atoms/v2/README.md
+../livemask-docs/design/app/atoms/v2/export/.wiki.md
+```
+
+The Atoms export is design source material, not Flutter runtime code. Translate
+the screen structure, states, copy, spacing, and components into Flutter widgets.
+Do not copy React / Atoms Cloud implementation code into this repository.
+
 ## Local macOS development
 
 The App is developed and debugged locally, not inside Docker.
@@ -59,12 +75,13 @@ Host rules:
 - Windows must be built on Windows, for example inside Parallels Desktop.
 - Unsupported targets are reported as skipped/blocking in the queue instead of being treated as success.
 
-Both targets call the local Backend through:
+Local App runs call the local Backend through:
 
 ```text
 API_BASE_URL=http://127.0.0.1:18080
 AUTH_CLIENT_MODE=real
 ```
 
-If `macos/` does not exist yet, the script generates the Flutter macOS scaffold
-with `flutter create --platforms=macos .`.
+iOS and macOS platform scaffolds are tracked in this repository. If another
+platform directory is missing, `scripts/local-app.sh` can generate the Flutter
+scaffold for that target before building.
