@@ -44,6 +44,10 @@ Environment:
   API_BASE_URL                 Backend URL. Default: http://127.0.0.1:18080
   LIVEMASK_BACKEND_HTTP_PORT   Used when API_BASE_URL is unset.
   LIVEMASK_APP_WEB_PORT        Flutter web-server port. Default: 3003
+  LIVEMASK_APP_IOS_SAFE_WORKDIR
+                               iOS build/run mirror directory. Default: /private/tmp/livemask-app-ios-$USER
+  LIVEMASK_APP_DISABLE_IOS_SAFE_WORKDIR
+                               Set to 1 to build iOS directly in the repo.
 
 Notes:
   - App runs locally, not in Docker, so Flutter/Dart/Xcode errors stay visible.
@@ -212,6 +216,27 @@ clean_apple_extended_attributes() {
   esac
 }
 
+execution_work_dir_for() {
+  local target="$1"
+  if [[ "${target}" != "ios" || "$(host_os)" != "macos" || "${LIVEMASK_APP_DISABLE_IOS_SAFE_WORKDIR:-}" == "1" ]]; then
+    printf '%s\n' "${APP_DIR}"
+    return 0
+  fi
+
+  local safe_dir="${LIVEMASK_APP_IOS_SAFE_WORKDIR:-/private/tmp/livemask-app-ios-${USER:-user}}"
+  mkdir -p "${safe_dir}"
+  echo "Using iOS safe workdir: ${safe_dir}" >&2
+  rsync -a --delete \
+    --exclude .git \
+    --exclude build \
+    --exclude .dart_tool \
+    --exclude .local-dev \
+    "${APP_DIR}/" "${safe_dir}/"
+  xattr -cr "${safe_dir}" 2>/dev/null || true
+  find "${safe_dir}" -name .DS_Store -delete 2>/dev/null || true
+  printf '%s\n' "${safe_dir}"
+}
+
 pid_file_for() {
   printf '%s/%s.pid' "${RUN_DIR}" "$1"
 }
@@ -363,9 +388,12 @@ execute_command_queue() {
     generator="start_command_for"
   fi
 
+  local work_dir
+  work_dir="$(execution_work_dir_for "${target}")" || return $?
+
   if [[ "${foreground}" == "true" || "${command_kind}" == "build" ]]; then
     (
-      cd "${APP_DIR}" || exit 1
+      cd "${work_dir}" || exit 1
       while IFS= read -r line; do
         echo "+ ${line}"
         eval "${line}"
@@ -375,7 +403,7 @@ execute_command_queue() {
   fi
 
   (
-    cd "${APP_DIR}" || exit 1
+    cd "${work_dir}" || exit 1
     while IFS= read -r line; do
       echo "+ ${line}"
       eval "${line}"

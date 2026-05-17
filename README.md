@@ -75,6 +75,21 @@ Host rules:
 - Windows must be built on Windows, for example inside Parallels Desktop.
 - Unsupported targets are reported as skipped/blocking in the queue instead of being treated as success.
 
+Current local device notes:
+
+- iOS simulator builds automatically use a safe mirror directory under
+  `/private/tmp/livemask-app-ios-$USER`. This avoids macOS Sequoia/iCloud
+  `com.apple.provenance` signing failures when the repo is under `Documents`.
+- iOS physical device runs require Xcode account signing: open Xcode, sign in
+  with an Apple ID or Developer Program account, set a unique bundle identifier,
+  and select a Team / Provisioning Profile.
+- Android SDK is expected at `/opt/homebrew/share/android-commandlinetools` on
+  this Mac. A physical Android phone must show as `device` in `adb devices -l`;
+  if it shows `unauthorized`, accept the USB debugging prompt on the phone.
+- Windows and Linux desktop builds should be run inside their Parallels Desktop
+  guest OS after cloning this repository and installing that guest's Flutter
+  desktop toolchain.
+
 Local App runs call the local Backend through:
 
 ```text
