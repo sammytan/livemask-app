@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../config/app_config.dart';
 import '../models/auth_models.dart';
 import '../providers/auth_providers.dart';
 
@@ -214,7 +215,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                     ],
                   ),
 
-                  // Mock credentials hint
+                  // Development credentials hint
                   const SizedBox(height: 16),
                   Container(
                     padding: const EdgeInsets.all(12),
@@ -226,14 +227,18 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'Demo credentials:',
+                          AppConfig.useMockAuthClient
+                              ? 'Mock credentials:'
+                              : 'Local development credentials:',
                           style: theme.textTheme.labelMedium?.copyWith(
                             color: theme.colorScheme.onSurface.withOpacity(0.6),
                           ),
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          'Email: test@livemask.app\nPassword: password123',
+                          AppConfig.useMockAuthClient
+                              ? 'Email: test@livemask.app\nPassword: password123'
+                              : 'Email: user@livemask.dev\nPassword: UserPass123!',
                           style: theme.textTheme.bodySmall?.copyWith(
                             fontFamily: 'monospace',
                             fontSize: 12,
