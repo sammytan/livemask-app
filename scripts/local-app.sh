@@ -5,6 +5,7 @@ APP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 STATE_DIR="${APP_DIR}/.local-dev"
 LOG_DIR="${STATE_DIR}/logs"
 RUN_DIR="${STATE_DIR}/run"
+LOCK_DIR="${RUN_DIR}/build.lock"
 mkdir -p "${LOG_DIR}" "${RUN_DIR}"
 
 command="${1:-}"
@@ -55,6 +56,7 @@ Notes:
   - Android requires Android SDK/toolchain.
   - Linux must be built on Linux.
   - Windows must be built on Windows, for example inside Parallels Desktop.
+  - Flutter builds are serialized by a local lock to avoid SDK/Xcode/Gradle state corruption.
 EOF
 }
 
@@ -226,15 +228,52 @@ execution_work_dir_for() {
   local safe_dir="${LIVEMASK_APP_IOS_SAFE_WORKDIR:-/private/tmp/livemask-app-ios-${USER:-user}}"
   mkdir -p "${safe_dir}"
   echo "Using iOS safe workdir: ${safe_dir}" >&2
+  rm -rf "${safe_dir}/ios/Pods" \
+    "${safe_dir}/ios/.symlinks" \
+    "${safe_dir}/ios/Podfile.lock" \
+    "${safe_dir}/ios/Runner.xcworkspace"
   rsync -a --delete \
     --exclude .git \
     --exclude build \
     --exclude .dart_tool \
     --exclude .local-dev \
+    --exclude ios/Pods \
+    --exclude ios/.symlinks \
+    --exclude ios/Podfile.lock \
+    --exclude ios/Runner.xcworkspace \
     "${APP_DIR}/" "${safe_dir}/"
   xattr -cr "${safe_dir}" 2>/dev/null || true
   find "${safe_dir}" -name .DS_Store -delete 2>/dev/null || true
   printf '%s\n' "${safe_dir}"
+}
+
+acquire_build_lock() {
+  local waited=0
+  while ! mkdir "${LOCK_DIR}" 2>/dev/null; do
+    local lock_pid=""
+    lock_pid="$(cat "${LOCK_DIR}/pid" 2>/dev/null || true)"
+    if [[ -n "${lock_pid}" ]] && ! kill -0 "${lock_pid}" >/dev/null 2>&1; then
+      echo "Removing stale local Flutter build lock from pid ${lock_pid}."
+      rm -rf "${LOCK_DIR}"
+      continue
+    fi
+    if [[ "${waited}" -eq 0 ]]; then
+      echo "Waiting for another LiveMask App build/run to finish..."
+    fi
+    waited=$((waited + 1))
+    if [[ "${waited}" -gt 900 ]]; then
+      echo "Timed out waiting for local Flutter build lock: ${LOCK_DIR}" >&2
+      return 1
+    fi
+    sleep 1
+  done
+  echo "$$" >"${LOCK_DIR}/pid"
+  trap 'rm -rf "${LOCK_DIR}"' EXIT
+}
+
+release_build_lock() {
+  rm -rf "${LOCK_DIR}"
+  trap - EXIT
 }
 
 pid_file_for() {
@@ -392,6 +431,7 @@ execute_command_queue() {
   work_dir="$(execution_work_dir_for "${target}")" || return $?
 
   if [[ "${foreground}" == "true" || "${command_kind}" == "build" ]]; then
+    acquire_build_lock || return $?
     (
       cd "${work_dir}" || exit 1
       while IFS= read -r line; do
@@ -399,15 +439,19 @@ execute_command_queue() {
         eval "${line}"
       done < <("${generator}" "${target}")
     ) 2>&1 | tee -a "${log_file}"
-    return "${PIPESTATUS[0]}"
+    local result="${PIPESTATUS[0]}"
+    release_build_lock
+    return "${result}"
   fi
 
   (
+    acquire_build_lock || exit $?
     cd "${work_dir}" || exit 1
     while IFS= read -r line; do
       echo "+ ${line}"
       eval "${line}"
     done < <("${generator}" "${target}")
+    release_build_lock
   ) >>"${log_file}" 2>&1 &
   echo "$!" >"$(pid_file_for "${target}")"
   sleep 2

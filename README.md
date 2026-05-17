@@ -68,6 +68,39 @@ Supported target names:
 macos, ios, android, linux, windows, web
 ```
 
+## Compatibility policy
+
+LiveMask App uses a rolling compatibility window. Each release must document the
+current tested OS set and keep compile/run verification evidence for every
+supported platform family.
+
+| Platform | Supported window | Engineering baseline | Verification owner |
+| --- | --- | --- | --- |
+| iOS | Latest 5 major versions and latest 10 minor/runtime releases available through Xcode | `IPHONEOS_DEPLOYMENT_TARGET=13.0` until native VPN runtime requires a higher floor | macOS host with Xcode simulator matrix; physical iPhone requires Apple Team signing |
+| Android | Latest 5 major Android versions and latest 10 API/minor releases available through Android Studio SDK Manager | Flutter Android default `minSdk`, compile SDK from installed Flutter/Android toolchain; update intentionally per release | macOS/Android Studio for APK build; physical Samsung/Android phone requires USB debugging authorization |
+| macOS | Latest 5 major versions and latest 10 minor releases | `MACOSX_DEPLOYMENT_TARGET=10.15` until native VPN/runtime features require a higher floor | macOS host |
+| Windows | Windows 10 and Windows 11 | Flutter Windows desktop target | Parallels Desktop Windows 11 and a Windows 10 VM/image before release |
+| Linux | Debian and Ubuntu desktop/server LTS families | Flutter Linux desktop target with GTK runtime dependencies | Parallels Desktop Linux guest; verify Debian stable and Ubuntu LTS |
+| Web | Current Chrome/Safari/Edge release family for UI-only preview | Flutter Web JS build; WebAssembly warnings are non-blocking until wasm is a release target | macOS host browser |
+
+Compatibility rules:
+
+- “Can compile” is not enough for release. A platform is release-ready only when
+  it also starts successfully and reaches the login screen against local Backend.
+- Native VPN integration is platform-specific. The UI can be shared, but VPN
+  runtime code must live behind platform adapters and be verified per OS.
+- iOS/macOS version support follows the Xcode toolchain actually installed on
+  the release machine. When Xcode drops old runtimes, archived validation must
+  be done on a pinned older machine/VM before claiming support.
+- Android support follows installed SDK platforms and physical/emulator coverage.
+  If an Android API/runtime cannot be installed locally, mark that cell as
+  unverified instead of assuming compatibility.
+- Windows/Linux builds must be run inside the target OS. macOS cannot be used as
+  proof that Windows/Linux desktop binaries build or launch.
+- Do not run multiple Flutter builds in parallel from different windows. The
+  local script serializes builds to avoid Flutter SDK, Gradle, and Xcode lock
+  corruption.
+
 Host rules:
 
 - macOS can build/run `macos`, `ios`, `web`, and Android when Android SDK is configured.
